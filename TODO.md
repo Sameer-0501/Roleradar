@@ -1,0 +1,6 @@
+- [ ] Fix PostCSS error about `@import url('https://fonts.googleapis.com/...Inter...Playfair...')` must be first in CSS.
+  - [ ] Identify the exact CSS file emitting this import (need the Vite error line with file path)
+  - [ ] Move/remove the Google Fonts `@import` so it appears before any other rules.
+- [ ] Ensure dev server starts cleanly.
+- [ ] Run `npm run build` and fix the Tailwind token build error (`tokens.css` missing) if it still fails.
+- [ ] Optionally address TypeScript `noUnusedLocals` errors (TS6133/TS6196) if `npm run build` / CI requires `tsc`.
