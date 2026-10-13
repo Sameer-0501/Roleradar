@@ -1,0 +1,118 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1787759043027,
+      "tag": "0000_supreme_roland_deschain",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1787845443027,
+      "tag": "0001_add_user_auth_and_preferences",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787913443027,
+      "tag": "0002_phase6_notifications_and_preferences",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787916443027,
+      "tag": "0003_email_verification",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787932843027,
+      "tag": "0004_companies_unique_name",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788884831657,
+      "tag": "0005_wide_vengeance",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788969514277,
+      "tag": "0006_confused_liz_osborn",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789219804191,
+      "tag": "0007_tranquil_mathemanic",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789379150535,
+      "tag": "0008_sudden_grim_reaper",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789489733095,
+      "tag": "0009_cuddly_wild_child",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789490998297,
+      "tag": "0010_sturdy_tiger_shark",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1789571797792,
+      "tag": "0011_flashy_rhino",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1789656303496,
+      "tag": "0012_bent_talisman",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1789714774316,
+      "tag": "0013_chilly_shaman",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1789735048711,
+      "tag": "0014_powerful_titania",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1789740595671,
+      "tag": "0015_quick_jane_foster",
+      "breakpoints": true
+    }
+  ]
+}

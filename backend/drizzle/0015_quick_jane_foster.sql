@@ -1,0 +1,1 @@
+ALTER TABLE "user_preferences" ALTER COLUMN "timezone" SET DEFAULT 'Asia/Kolkata';

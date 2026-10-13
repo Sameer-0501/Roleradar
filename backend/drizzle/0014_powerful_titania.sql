@@ -1,0 +1,1 @@
+ALTER TABLE "jobs" ADD COLUMN "initial_verified_at" timestamp with time zone;

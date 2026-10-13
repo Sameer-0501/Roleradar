@@ -1,0 +1,31 @@
+# KCarrier Job Engine — local development database
+# Usage:
+#   docker compose up -d
+#   docker compose down
+#   docker compose down -v   # also removes the persistent volume
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: kcarrier_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: kcarrier_jobs
+      POSTGRES_USER: kcarrier
+      POSTGRES_PASSWORD: kcarrier_dev_password
+      # PostgreSQL 16 defaults to scram-sha-256 which node-postgres can fail on.
+      # md5 is fully supported by pg and correct for local development.
+      POSTGRES_HOST_AUTH_METHOD: md5
+    ports:
+      - "5433:5432"
+    volumes:
+      - kcarrier_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U kcarrier -d kcarrier_jobs" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  kcarrier_postgres_data:
+    driver: local

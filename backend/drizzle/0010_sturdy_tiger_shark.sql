@@ -1,0 +1,1 @@
+CREATE INDEX "jobs_status_ver_last_verified_idx" ON "jobs" USING btree ("status","verification_status","last_verified_at");

@@ -1,0 +1,45 @@
+{
+  "name": "roleradar-job-engine",
+  "version": "1.0.0",
+  "description": "KCarrier Original Job Verification & Alert Engine — backend service",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "migrate:generate": "drizzle-kit generate",
+    "migrate:run": "tsx src/database/migrate.ts",
+    "test": "vitest run --exclude 'src/tests/*-integration.test.ts'",
+    "test:watch": "vitest --exclude 'src/tests/*-integration.test.ts'",
+    "test:integration": "vitest run --fileParallelism false src/tests/greenhouse-integration.test.ts src/tests/lever-integration.test.ts src/tests/workday-integration.test.ts src/tests/custom-integration.test.ts src/tests/ashby-integration.test.ts",
+    "forensic": "tsx src/scripts/forensic.ts",
+    "test:perf": "tsx src/scripts/test-matching-perf.ts"
+  },
+  "dependencies": {
+    "cheerio": "^1.2.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "drizzle-orm": "^0.44.1",
+    "express": "^4.21.2",
+    "express-rate-limit": "^8.7.0",
+    "nodemailer": "^9.0.6",
+    "pg": "^8.23.0",
+    "pino": "^9.7.0",
+    "pino-pretty": "^13.0.0",
+    "playwright": "^1.63.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.15.29",
+    "@types/nodemailer": "^8.0.1",
+    "@types/pg": "^8.23.1",
+    "@types/supertest": "^7.2.1",
+    "drizzle-kit": "^0.31.1",
+    "supertest": "^7.2.2",
+    "tsx": "^4.19.4",
+    "typescript": "~5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

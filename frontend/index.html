@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RoleRadar — Verified Job Alerts</title>
+  <meta name="description" content="RoleRadar finds genuine job openings from official company career sources, verifies them, and alerts you when they match your preferences.">
+</head>
+
+<body class="kn-page app-shell">
+  <header class="app-nav" role="navigation" aria-label="Main navigation">
+    <a href="#/" class="app-nav__logo" aria-label="RoleRadar home">RoleRadar</a>
+    <button type="button" class="app-nav__toggle" aria-label="Open menu" aria-expanded="false">
+      <span class="app-nav__toggle-bar"></span>
+      <span class="app-nav__toggle-bar"></span>
+      <span class="app-nav__toggle-bar"></span>
+    </button>
+    <!-- Authenticated nav (shown when logged in) -->
+    <nav class="app-nav__links app-nav__links--auth" id="nav-authenticated" style="display:none;">
+      <a href="#/dashboard" class="app-nav__link" data-route="dashboard">Dashboard</a>
+      <a href="#/dashboard/verified-jobs" class="app-nav__link" data-route="dashboard/verified-jobs">Verified Jobs</a>
+      <a href="#/dashboard/saved" class="app-nav__link" data-route="dashboard/saved">Saved</a>
+      <a href="#/dashboard/applications" class="app-nav__link" data-route="dashboard/applications">Applications</a>
+      <a href="#/preferences" class="app-nav__link" data-route="preferences">Preferences</a>
+      <a href="#/dashboard/alerts" class="app-nav__link" data-route="dashboard/alerts">Alerts</a>
+      <a href="#/dashboard/account" class="app-nav__link" data-route="dashboard/account">Account</a>
+    </nav>
+    <!-- Unauthenticated nav (shown when logged out) -->
+    <nav class="app-nav__links app-nav__links--guest" id="nav-guest">
+      <a href="#/login" class="app-nav__link" data-route="login">Sign In</a>
+      <a href="#/register" class="kn-btn kn-btn--primary app-nav__cta-btn" data-route="register">Get Started</a>
+    </nav>
+  </header>
+
+  <main class="app-main" id="app-main">
+    <section class="app-page" id="app-page" data-route="" aria-live="polite"></section>
+  </main>
+
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+
+</html>

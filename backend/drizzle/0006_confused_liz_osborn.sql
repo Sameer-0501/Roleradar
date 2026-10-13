@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS "notifications_idempotency_key_unique" ON "notifications" USING btree ("idempotency_key");
