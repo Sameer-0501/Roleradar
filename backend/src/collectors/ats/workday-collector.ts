@@ -57,6 +57,8 @@ export interface WorkdaySourceConfig {
   pageSize?: number;
   /** Maximum number of pages to fetch per scan (default: 5, safety cap) */
   maxPages?: number;
+  /** Optional declarative facets to filter CXS search query */
+  appliedFacets?: Record<string, string[]>;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -141,9 +143,13 @@ async function fetchWithRetry(
  */
 function extractJobReqId(posting: WorkdayPostingSummary): string | undefined {
   if (posting.bulletFields && Array.isArray(posting.bulletFields) && posting.bulletFields.length > 0) {
-    const firstBullet = posting.bulletFields[0]?.trim();
-    if (firstBullet && firstBullet.length > 0) {
-      return firstBullet;
+    // 1. Look for a bullet that matches an alphanumeric requisition ID token with digits (e.g. JREQ199503, SR-42743, 26WD100698)
+    const reqCandidate = posting.bulletFields.find((f: string) => {
+      const trimmed = f?.trim();
+      return Boolean(trimmed && /^[A-Za-z0-9_-]+$/.test(trimmed) && /\d/.test(trimmed));
+    });
+    if (reqCandidate) {
+      return reqCandidate.trim();
     }
   }
 
@@ -151,6 +157,13 @@ function extractJobReqId(posting: WorkdayPostingSummary): string | undefined {
     const match = posting.externalPath.match(/_([A-Za-z0-9-]+)$/);
     if (match && match[1]) {
       return match[1].trim();
+    }
+  }
+
+  if (posting.bulletFields && Array.isArray(posting.bulletFields) && posting.bulletFields.length > 0) {
+    const firstBullet = posting.bulletFields[0]?.trim();
+    if (firstBullet && firstBullet.length > 0) {
+      return firstBullet;
     }
   }
 
@@ -173,7 +186,17 @@ export class WorkdayCollector extends BaseCollector {
       timeoutMs: config.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       pageSize: config.pageSize ?? DEFAULT_PAGE_SIZE,
       maxPages: config.maxPages ?? DEFAULT_MAX_PAGES,
+      appliedFacets: config.appliedFacets ?? {},
     };
+  }
+
+  /**
+   * Returns whether this scan represents an authoritative, 100% complete global scan.
+   * If specific facets (e.g. locationCountry) are applied, this is a scoped/partial scan,
+   * meaning absent jobs must NOT be closed based on absence from this scan.
+   */
+  isCompleteScan(): boolean {
+    return !this.config.appliedFacets || Object.keys(this.config.appliedFacets).length === 0;
   }
 
   getSourceName(): string {
@@ -205,7 +228,12 @@ export class WorkdayCollector extends BaseCollector {
         this.searchUrl,
         {
           method: 'POST',
-          body: JSON.stringify({ appliedFacets: {}, limit: 1, offset: 0, searchText: '' }),
+          body: JSON.stringify({
+            appliedFacets: this.config.appliedFacets ?? {},
+            limit: 1,
+            offset: 0,
+            searchText: '',
+          }),
         },
         this.config.timeoutMs,
         0
@@ -268,7 +296,7 @@ export class WorkdayCollector extends BaseCollector {
           {
             method: 'POST',
             body: JSON.stringify({
-              appliedFacets: {},
+              appliedFacets: this.config.appliedFacets ?? {},
               limit: this.config.pageSize,
               offset,
               searchText: '',
@@ -352,8 +380,14 @@ export class WorkdayCollector extends BaseCollector {
         if (posting.locationsText && typeof posting.locationsText === 'string') {
           const loc = posting.locationsText.trim();
           if (loc.length > 0) candidate.location = loc;
-        } else if (posting.bulletFields && Array.isArray(posting.bulletFields) && posting.bulletFields.length > 1) {
-          const fallbackLoc = posting.bulletFields[1];
+        } else if (posting.bulletFields && Array.isArray(posting.bulletFields) && posting.bulletFields.length > 0) {
+          const fallbackLoc = posting.bulletFields.find((f: string) => {
+            const trimmed = f?.trim();
+            if (!trimmed) return false;
+            if (trimmed === reqId) return false;
+            if (posting.title && trimmed.toLowerCase() === posting.title.trim().toLowerCase()) return false;
+            return true;
+          });
           if (fallbackLoc && typeof fallbackLoc === 'string') {
             const loc = fallbackLoc.trim();
             if (loc.length > 0) candidate.location = loc;

@@ -1,12 +1,18 @@
 ---
 name: Shareable Reports and Plans
-description: Enforces the creation of a shareable, sanitized version of reports, plans, and walkthroughs without sensitive credentials.
+description: Enforces mandatory shareability assessment and delivery of sanitized shareable versions for all reports, plans, walkthroughs, and audits.
 ---
 
-# Shareable Reports and Plans Rule
+# Mandatory Shareable Reports & Plans Policy
 
-Whenever you complete a task and prepare an implementation plan, walkthrough, audit report, or final report, you MUST:
-1. Explicitly state whether the primary report contains sensitive information (security credentials, personal data, internal IP addresses, etc.) and whether it is safe to share.
-2. Provide a "Shareable Report" (either as a section or a separate artifact) that is fully sanitized.
-3. Ensure the shareable version contains NO security credentials, API keys, personal data, or confidential system paths.
-4. Proactively offer this shareable version without waiting for the user to ask.
+Whenever completing any task and producing an implementation plan, walkthrough, audit report, milestone summary, or technical report:
+
+1. **Shareability Status Banner**:
+   - At the top of every report/walkthrough/plan, explicitly state the shareability status:
+     - `STATUS: SAFE TO SHARE` (No credentials, secrets, personal data, or private internal infra exposed)
+     - `STATUS: SENSITIVE / INTERNAL ONLY` (Contains private credentials, API keys, internal paths, tokens, or personal identifiers)
+2. **Provide a Shareable / Sanitized Report**:
+   - If the main artifact or output contains any sensitive credentials, environment secrets, tokens, personal machine paths, or private data, you MUST provide a sanitized **Shareable Version** (or clearly marked sanitized section) with all sensitive items redacted (e.g. `[REDACTED_API_KEY]`, `[REDACTED_SECRET]`, `[USER_HOME]`).
+3. **Proactive & Non-Negotiable**:
+   - Do NOT wait for the user to ask. Every delivery must proactively include this verification and sanitized shareable output.
+

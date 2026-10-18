@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import { getDb } from '../database/connection.js';
@@ -399,5 +399,9 @@ describe('Admin Operations (Phase 16.4A)', () => {
       expect(updated!.last_attempted_at).toBeNull();
       expect(updated!.idempotency_key).toBe('test_failed_1');
     });
+  });
+
+  afterAll(() => {
+    vi.restoreAllMocks();
   });
 });

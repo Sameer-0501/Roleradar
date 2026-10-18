@@ -204,7 +204,7 @@
 .vjp__control-label {
     font-size: 0.825rem;
     font-weight: 600;
-    color: #64748b;
+    color: #475569;
 }
 
 .vjp__select {
@@ -267,7 +267,7 @@
 
 .vjc__freshness-badge--aging {
     background: #f8fafc;
-    color: #64748b;
+    color: #475569;
     border: 1px solid #e2e8f0;
 }
 
@@ -391,7 +391,7 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: #64748b;
+    color: #475569;
 }
 
 .app-modal-verif-tag {
@@ -411,7 +411,7 @@
     border: none;
     font-size: 1.25rem;
     cursor: pointer;
-    color: #64748b;
+    color: #475569;
     padding: 4px 8px;
     border-radius: 6px;
 }
@@ -448,7 +448,7 @@
 
 .modal-meta-card strong {
     font-size: 0.75rem;
-    color: #64748b;
+    color: #475569;
     text-transform: uppercase;
     margin-bottom: 2px;
 }
@@ -644,7 +644,7 @@
 
 .profile-headline {
   font-size: 0.9rem;
-  color: #64748b;
+  color: #475569;
   margin: 2px 0 6px 0;
 }
 
@@ -726,7 +726,7 @@
 
 .resume-item-meta {
   font-size: 0.75rem;
-  color: #64748b;
+  color: #475569;
 }
 
 .resume-badge {
@@ -765,7 +765,7 @@
 .profile-skill-cat {
   font-size: 0.7rem;
   font-weight: 500;
-  color: #64748b;
+  color: #475569;
   background: #e2e8f0;
   padding: 1px 5px;
   border-radius: 4px;
@@ -883,7 +883,7 @@
 
 .skill-tag--missing {
   background: #f1f5f9;
-  color: #64748b;
+  color: #475569;
   border: 1px solid #cbd5e1;
 }
 

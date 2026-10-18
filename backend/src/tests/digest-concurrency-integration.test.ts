@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { getDb } from '../database/connection.js';
 import { schema } from '../database/index.js';
@@ -129,8 +130,8 @@ describe('Windowed Digest Concurrency & Budget Constraints', () => {
 
       // Run two processing cycles concurrently
       await Promise.all([
-        windowedDigestWorker.processCycle(),
-        windowedDigestWorker.processCycle(),
+        windowedDigestWorker.processCycle(testUserId1),
+        windowedDigestWorker.processCycle(testUserId1),
       ]);
 
       // Verify exactly ONE digest was created
@@ -213,8 +214,8 @@ describe('Windowed Digest Concurrency & Budget Constraints', () => {
       (config as any).emailDailySafetyBudget = 10;
 
       await Promise.all([
-        windowedDigestWorker.processCycle(),
-        windowedDigestWorker.processCycle(),
+        windowedDigestWorker.processCycle([testUserId1, testUserId2]),
+        windowedDigestWorker.processCycle([testUserId1, testUserId2]),
       ]);
 
       // Verify both users got exactly one digest
@@ -263,7 +264,7 @@ describe('Windowed Digest Concurrency & Budget Constraints', () => {
       });
 
       // 1. Process cycle - will fail on budget
-      await windowedDigestWorker.processCycle();
+      await windowedDigestWorker.processCycle(testUserId1);
 
       // Verify the digest intent was created but marked FAILED
       const digests = (await db.execute(sql`SELECT * FROM notifications WHERE user_id = ${testUserId1} AND notification_type = 'WINDOWED_DIGEST'`)).rows;
@@ -282,7 +283,7 @@ describe('Windowed Digest Concurrency & Budget Constraints', () => {
       (config as any).emailDailySafetyBudget = 10;
       (windowedDigestWorker as any).getActiveWindowForTimezone = () => '16:30';
 
-      await windowedDigestWorker.processCycle();
+      await windowedDigestWorker.processCycle(testUserId1);
 
       // Verify a new digest was created for the new window and it succeeded
       const allDigests = (await db.execute(sql`SELECT * FROM notifications WHERE user_id = ${testUserId1} AND notification_type = 'WINDOWED_DIGEST' ORDER BY created_at ASC`)).rows;

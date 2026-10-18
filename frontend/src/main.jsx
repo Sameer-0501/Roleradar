@@ -11,11 +11,8 @@ import './modules/onboarding/onboarding.css';
 import './legacy/jobs.js';
 import { initApp } from './legacy/app.js';
 
-// Import Module Entry Points (React components)
-// These files use ReactDOM.createRoot to mount themselves into specific DOM elements.
-import './dashboard/resume/main-resume';
-import './dashboard/prep/main-prep';
-import './dashboard/admin/main-admin';
+// Note: Module Entry Points (Resume, Prep, Admin) are dynamically loaded
+// on-demand when visiting their respective routes to optimize initial bundle size.
 
 console.log('Main entry point loaded');
 

@@ -5,6 +5,8 @@ import { getDb } from '../database/connection.js';
 import { schema } from '../database/index.js';
 import { eq, inArray, sql } from 'drizzle-orm';
 import { windowedDigestWorker } from '../notifications/digest-worker.js';
+import { ConsoleEmailProvider } from '../notifications/email/providers/console-provider.js';
+import { setEmailProviderForTesting } from '../notifications/email/provider-factory.js';
 
 function generateMockJobs(count: number): WindowedDigestJob[] {
   return Array.from({ length: count }, (_, i) => ({
@@ -103,6 +105,9 @@ describe('Digest Worker Recovery Semantics (acquired > fetched)', () => {
   let validJobId2: string;
 
   beforeAll(async () => {
+    // Setup safe console email provider for tests
+    setEmailProviderForTesting(new ConsoleEmailProvider());
+
     // Cleanup any existing test data
     await db.execute(sql`DELETE FROM jobs WHERE external_job_id LIKE 'ext-recov-%'`);
     await db.delete(schema.users).where(eq(schema.users.email, 'recovery.test@roleradar.dev'));
@@ -122,7 +127,7 @@ describe('Digest Worker Recovery Semantics (acquired > fetched)', () => {
       email_alerts_enabled: true,
       instant_notifications: true,
       daily_digest: false,
-      timezone: 'UTC',
+      timezone: 'America/New_York',
     });
 
     // Create company
@@ -163,6 +168,7 @@ describe('Digest Worker Recovery Semantics (acquired > fetched)', () => {
     await db.execute(sql`DELETE FROM jobs WHERE external_job_id LIKE 'ext-recov-%'`);
     await db.delete(schema.companies).where(eq(schema.companies.name, 'Recovery Test Corp'));
     await db.delete(schema.users).where(eq(schema.users.email, 'recovery.test@roleradar.dev'));
+    setEmailProviderForTesting(null);
   });
 
   it('acquired notifications > fetched jobs: unmatched notifications safely return/remain PENDING', async () => {
@@ -199,13 +205,14 @@ describe('Digest Worker Recovery Semantics (acquired > fetched)', () => {
         idempotency_key: 'test_recov_notif_3',
       }).returning({ id: schema.notifications.id });
 
-      // Run digest processing cycle
-      await windowedDigestWorker.processCycle();
+      // Run digest processing cycle strictly for the test user
+      await windowedDigestWorker.processCycle(testUserId);
 
       // Verify the digest was created and SENT
       const digests = (await db.execute(sql`
         SELECT * FROM notifications 
         WHERE user_id = ${testUserId} AND notification_type = 'WINDOWED_DIGEST'
+        ORDER BY created_at DESC
       `)).rows;
       expect(digests.length).toBeGreaterThanOrEqual(1);
       expect(digests[0]!.delivery_status).toBe('SENT');

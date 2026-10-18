@@ -107,7 +107,7 @@ export function parseExperienceRequirements(
 
   // -- 2. Explicit Entry-level / Fresher keywords in Title / Text ---------------
   const entryTitleRegex =
-    /\b(intern|internship|graduate|new grad|entry level|entry-level|junior|associate|trainee|campus|early career|university graduate|sde\s*[-]?\s*(?:1|i)\b|software\s+engineer\s*[-]?\s*(?:1|i)\b|software\s+developer\s*[-]?\s*(?:1|i)\b|engineer\s*[-]?\s*(?:1|i)\b|developer\s*[-]?\s*(?:1|i)\b|computer\s+scientist\s*[-]?\s*(?:1|i)\b|mts\s*[-]?\s*(?:1|i)\b|member\s+of\s+technical\s+staff\s*[-]?\s*(?:1|i)\b|qa\s+engineer\s*[-]?\s*(?:1|i)\b|test\s+engineer\s*[-]?\s*(?:1|i)\b|data\s+analyst\s*[-]?\s*(?:1|i)\b|data\s+engineer\s*[-]?\s*(?:1|i)\b|graduate\s+engineer\s+trainee|get)\b/i;
+    /\b(intern|internship|graduate|new grad|entry level|entry-level|junior|associate|trainee|apprentice|apprenticeship|campus|early career|university graduate|sde\s*[-]?\s*(?:1|i)\b|software\s+engineer\s*[-]?\s*(?:1|i)\b|software\s+developer\s*[-]?\s*(?:1|i)\b|engineer\s*[-]?\s*(?:1|i)\b|developer\s*[-]?\s*(?:1|i)\b|computer\s+scientist\s*[-]?\s*(?:1|i)\b|mts\s*[-]?\s*(?:1|i)\b|member\s+of\s+technical\s+staff\s*[-]?\s*(?:1|i)\b|qa\s+engineer\s*[-]?\s*(?:1|i)\b|test\s+engineer\s*[-]?\s*(?:1|i)\b|data\s+analyst\s*[-]?\s*(?:1|i)\b|data\s+engineer\s*[-]?\s*(?:1|i)\b|graduate\s+engineer\s+trainee|get)\b/i;
   if (entryTitleRegex.test(titleLower) || isEntryMts) {
     return {
       classification: 'FRESHER_COMPATIBLE',

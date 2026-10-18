@@ -60,6 +60,8 @@ export interface SmartRecruitersSourceConfig {
   timeoutMs?: number;
   /** Maximum number of pages to fetch per scan (default: 10) */
   maxPages?: number;
+  /** Number of jobs per page / limit (default: 100) */
+  pageSize?: number;
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -151,6 +153,7 @@ export class SmartrecruitersCollector extends BaseCollector {
       officialDomain: config.officialDomain ?? 'jobs.smartrecruiters.com',
       timeoutMs: config.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       maxPages: config.maxPages ?? DEFAULT_MAX_PAGES,
+      pageSize: config.pageSize ?? 100,
     };
   }
 
@@ -215,7 +218,7 @@ export class SmartrecruitersCollector extends BaseCollector {
     const candidates: JobCandidate[] = [];
     let rejected = 0;
     let offset = 0;
-    const limit = 100;
+    const limit = this.config.pageSize;
 
     for (let page = 0; page < this.config.maxPages; page++) {
       const url = `https://api.smartrecruiters.com/v1/companies/${this.config.companyIdentifier}/postings?offset=${offset}&limit=${limit}`;

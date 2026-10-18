@@ -22,6 +22,7 @@ export interface WorkdaySourceConfig {
   site?: string;
   clientSite?: string;
   maxPages?: number;
+  appliedFacets?: Record<string, string[]>;
 }
 
 export interface AshbySourceConfig {
@@ -35,6 +36,8 @@ export interface WorkableSourceConfig {
 export interface SmartRecruitersSourceConfig {
   companyIdentifier: string;
   companyName?: string;
+  pageSize?: number;
+  maxPages?: number;
 }
 
 export interface SapSourceConfig {

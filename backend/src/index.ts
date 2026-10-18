@@ -43,6 +43,7 @@ async function bootstrap() {
       origin: config.corsOrigins,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization'],
+      maxAge: 86400,
     })
   );
   app.use(express.json({ limit: '1mb' }));
@@ -113,6 +114,7 @@ async function bootstrap() {
               host: source.config.host,
               tenant: source.config.tenant,
               clientSite: source.config.clientSite,
+              appliedFacets: source.config.appliedFacets,
             },
           };
         } else if (source.atsType === 'CUSTOM') {

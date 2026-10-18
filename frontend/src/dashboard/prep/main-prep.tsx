@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client';
 import PrepPage from '../../modules/prep/PrepPage';
 
 // Function to mount the app
-const mountPrep = () => {
+export const mountPrep = () => {
     console.log('[Prep] Attempting to mount...');
     const rootElement = document.getElementById('prep-root');
     if (rootElement) {
@@ -24,17 +24,8 @@ const mountPrep = () => {
     }
 };
 
-// Observer to watch for the container injection
-const observer = new MutationObserver((_mutations) => {
-    if (document.getElementById('prep-root')) {
-        mountPrep();
-    }
-});
+// Immediate mount if target exists in DOM
+if (typeof document !== 'undefined' && document.getElementById('prep-root')) {
+    mountPrep();
+}
 
-observer.observe(document.body, {
-    childList: true,
-    subtree: true
-});
-
-// Initial check
-mountPrep();

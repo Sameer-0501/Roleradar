@@ -151,6 +151,32 @@ describe('WorkdayCollector', () => {
     expect(candidates[0]!.location).toBe('Pernambuco, Brazil');
   });
 
+  it('extracts location from bulletFields[0] when bulletFields[1] is reqId (Nationwide-style)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          total: 1,
+          jobPostings: [
+            {
+              title: 'Software Engineer',
+              externalPath: '/job/Hyd/Software-Engineer_099707',
+              bulletFields: ['Hyderabad, India', '099707', 'Software Engineer'],
+            },
+          ],
+        }),
+      })
+    );
+
+    const collector = createCollector();
+    const candidates = await collector.discoverJobs();
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]!.externalJobId).toBe('099707');
+    expect(candidates[0]!.location).toBe('Hyderabad, India');
+  });
+
   it('safely leaves location undefined when locationsText is missing and bulletFields is empty', async () => {
     vi.stubGlobal(
       'fetch',

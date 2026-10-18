@@ -1008,7 +1008,7 @@ body.app-modal-open {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #64748b;
+  color: #475569;
 }
 
 .vjc__verified-badge {
@@ -1143,7 +1143,7 @@ body.app-modal-open {
 
 .app-state__subtitle {
   font-size: var(--kn-body-size);
-  color: #64748b;
+  color: #475569;
   max-width: 480px;
   margin: 0 auto var(--kn-space-3) auto;
   line-height: 1.55;
@@ -1151,7 +1151,7 @@ body.app-modal-open {
 
 .app-state__message {
   font-size: var(--kn-body-size);
-  color: #64748b;
+  color: #475569;
   margin: 0;
 }
 
@@ -1202,7 +1202,7 @@ body.app-modal-open {
 
 .vjp__total {
   font-size: 0.875rem;
-  color: #64748b;
+  color: #475569;
   margin-bottom: var(--kn-space-3);
 }
 
@@ -1217,7 +1217,7 @@ body.app-modal-open {
 
 .dashboard-tagline {
   font-size: var(--kn-body-size);
-  color: rgba(17,17,17,0.6);
+  color: #334155;
   margin: var(--kn-space-1) 0 0 0;
 }
 
@@ -1239,7 +1239,7 @@ body.app-modal-open {
 .dashboard-feed-count {
   font-size: 0.9rem;
   font-weight: 400;
-  color: #64748b;
+  color: #475569;
 }
 
 .dashboard-feed-viewall {
@@ -1555,7 +1555,7 @@ body.app-modal-open {
 
 .notif-badge--permanent {
   background: #f1f5f9;
-  color: #64748b;
+  color: #475569;
   border: 1px solid #cbd5e1;
 }
 
@@ -1904,7 +1904,7 @@ body.app-modal-open {
 .workspace-stat-label {
   font-size: 0.85rem;
   font-weight: 600;
-  color: #64748b;
+  color: #475569;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -1995,7 +1995,7 @@ body.app-modal-open {
 
 /* Dismiss / Hide button */
 .vjc__btn-action--dismiss {
-  color: #64748b;
+  color: #475569;
 }
 
 .vjc__btn-action--dismiss:hover {
@@ -2157,7 +2157,7 @@ body.app-modal-open {
 .workspace-toolbar__label {
   font-size: 0.8rem;
   font-weight: 600;
-  color: #64748b;
+  color: #475569;
 }
 
 .workspace-toolbar__select {
@@ -2224,13 +2224,13 @@ body.app-modal-open {
 .workspace-recent-card-company {
   font-size: 0.8rem;
   font-weight: 600;
-  color: #64748b;
+  color: #475569;
   text-transform: uppercase;
 }
 
 .workspace-recent-card-meta {
   font-size: 0.78rem;
-  color: #94a3b8;
+  color: #475569;
   display: flex;
   justify-content: space-between;
   align-items: center;

@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { getDb } from '../database/connection.js';
 import { schema } from '../database/index.js';
-import { sql, eq, desc, and, gte, inArray } from 'drizzle-orm';
+import { sql, eq, desc, and, gte, inArray, isNotNull } from 'drizzle-orm';
 import { createLogger } from '../utils/logger.js';
 import { scheduler } from '../scheduler/scheduler.js';
 import { windowedDigestWorker } from '../notifications/digest-worker.js';
@@ -67,10 +67,14 @@ export async function overviewHandler(_req: Request, res: Response) {
     const [jobPending] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(schema.notifications)
+      .innerJoin(schema.jobs, eq(schema.notifications.job_id, schema.jobs.id))
       .where(
         and(
           eq(schema.notifications.notification_type, 'INSTANT_JOB'),
           eq(schema.notifications.delivery_status, 'PENDING'),
+          isNotNull(schema.notifications.job_id),
+          eq(schema.jobs.status, 'ACTIVE'),
+          eq(schema.jobs.verification_status, 'VERIFIED'),
           gte(schema.notifications.created_at, last24h)
         )
       );

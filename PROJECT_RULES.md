@@ -38,6 +38,16 @@ Every change requires verification evidence:
 
 ---
 
+## Shareable Reports & Security Sanitization
+
+**Absolute Requirement:** Whenever preparing any implementation plan, walkthrough, audit report, milestone review, or technical summary:
+
+1. **Shareability Status**: State prominently at the top whether the document is safe to share with external parties (`STATUS: SAFE TO SHARE` or `STATUS: SENSITIVE / INTERNAL ONLY`).
+2. **Proactive Sanitization**: If the report references any credentials, secret keys, API tokens, internal URLs, database connection strings, or personal user paths, provide a sanitized **Shareable Report** version directly with all secrets redacted (`[REDACTED_SECRET]`, `[USER_HOME]`, etc.).
+3. **No Prompting Needed**: This must be executed proactively on every task completion without requiring user reminders.
+
+---
+
 ## Search-First Discipline
 
 **Before reading any file completely:**

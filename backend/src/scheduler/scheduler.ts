@@ -344,7 +344,10 @@ class JobScheduler {
 
         // Run the pipeline with complete scan safety
         if (job.companyId && job.sourceConfig && candidates.length > 0) {
-          const stats = await runPipeline(candidates, job.companyId, job.sourceConfig, true);
+          const isCompleteScan = typeof (job.collector as any).isCompleteScan === 'function'
+            ? (job.collector as any).isCompleteScan()
+            : true;
+          const stats = await runPipeline(candidates, job.companyId, job.sourceConfig, isCompleteScan);
           jobsVerified = stats.verified;
           jobsRejected = stats.failed + stats.skipped;
         } else if (!job.companyId || !job.sourceConfig) {

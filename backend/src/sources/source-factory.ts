@@ -39,6 +39,7 @@ export function createCollectorForSource(source: SourceDefinition): ICollector {
         clientSite: source.config.clientSite ?? source.config.site ?? '',
         companyName: source.companyName,
         officialDomain: source.officialDomain,
+        appliedFacets: source.config.appliedFacets,
       });
 
     case 'ASHBY':

@@ -1,11 +1,12 @@
 ---
-description: Ensure all generated reports, plans, and audits include a shareability statement.
+description: Ensure all generated reports, plans, walkthroughs, and audits include a shareability assessment and sanitized shareable version.
 ---
 
-# Report Shareability Rule
+# Report Shareability Policy
 
-Whenever you complete a task that involves preparing an implementation plan, walkthrough, audit report, or any other type of report/document, you MUST explicitly include a "Shareability Assessment" section or statement.
+Refer to [.agents/rules/shareable_reports.md](file:///c:/Users/Samee/Documents/RoleRadar/.agents/rules/shareable_reports.md) for full details.
 
-This statement must clearly declare whether the document is safe to share externally or if it contains sensitive security information, API keys, personal credentials, or internal proprietary data that should be redacted first.
+Whenever preparing any implementation plan, walkthrough, audit report, or final report:
+- Clearly declare whether the document is safe to share with external parties.
+- Always provide a sanitized, shareable version proactively whenever sensitive credentials, personal paths, or internal tokens are present.
 
-If the document contains sensitive information, you should proactively offer to generate a sanitized, "shareable" version of the report for the user.

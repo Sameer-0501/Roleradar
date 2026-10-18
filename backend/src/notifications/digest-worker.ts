@@ -67,30 +67,36 @@ export class WindowedDigestWorker {
    * 2. Retry FAILED digests.
    * 3. Create new WINDOWED_DIGESTs for users in active windows with PENDING jobs.
    */
-  async processCycle(): Promise<void> {
+  async processCycle(targetUserId?: string | string[]): Promise<void> {
     if (this.isProcessing) return;
     this.isProcessing = true;
     
     try {
-      await this.recoverStaleDigests();
-      await this.processNewDigests();
+      await this.recoverStaleDigests(targetUserId);
+      await this.processNewDigests(targetUserId);
     } finally {
       this.isProcessing = false;
     }
   }
 
-  private async recoverStaleDigests() {
+  private async recoverStaleDigests(targetUserId?: string | string[]) {
     const db = getDb();
     const staleThreshold = new Date(Date.now() - STALE_PROCESSING_TIMEOUT_MS);
+    const staleConditions = [
+      eq(schema.notifications.notification_type, 'WINDOWED_DIGEST'),
+      eq(schema.notifications.delivery_status, 'PROCESSING'),
+      lte(schema.notifications.last_attempted_at, staleThreshold),
+    ];
+    if (targetUserId) {
+      if (Array.isArray(targetUserId)) {
+        staleConditions.push(inArray(schema.notifications.user_id, targetUserId));
+      } else {
+        staleConditions.push(eq(schema.notifications.user_id, targetUserId));
+      }
+    }
     const staleDigests = await db.select({ id: schema.notifications.id })
       .from(schema.notifications)
-      .where(
-        and(
-          eq(schema.notifications.notification_type, 'WINDOWED_DIGEST'),
-          eq(schema.notifications.delivery_status, 'PROCESSING'),
-          lte(schema.notifications.last_attempted_at, staleThreshold)
-        )
-      );
+      .where(and(...staleConditions));
 
     if (staleDigests.length > 0) {
       const digestIds = staleDigests.map(d => d.id);
@@ -178,17 +184,53 @@ export class WindowedDigestWorker {
     }
   }
 
-  private async processNewDigests() {
+  private async processNewDigests(targetUserId?: string | string[]) {
     const db = getDb();
     
-    // 1. Find users who have PENDING INSTANT_JOB notifications
-    const usersWithPendingJobsResult = await db.execute(sql`
-      SELECT DISTINCT user_id 
-      FROM notifications 
-      WHERE notification_type = 'INSTANT_JOB' 
-        AND delivery_status = 'PENDING'
-        AND digest_id IS NULL
-    `);
+    // 1. Find users who have PENDING INSTANT_JOB notifications with an ACTIVE + VERIFIED job
+    let usersWithPendingJobsResult;
+    if (targetUserId) {
+      if (Array.isArray(targetUserId)) {
+        const idList = sql.join(targetUserId.map(id => sql`${id}`), sql`, `);
+        usersWithPendingJobsResult = await db.execute(sql`
+          SELECT DISTINCT n.user_id 
+          FROM notifications n
+          INNER JOIN jobs j ON n.job_id = j.id
+          WHERE n.notification_type = 'INSTANT_JOB' 
+            AND n.delivery_status = 'PENDING'
+            AND n.digest_id IS NULL
+            AND n.job_id IS NOT NULL
+            AND j.status = 'ACTIVE'
+            AND j.verification_status = 'VERIFIED'
+            AND n.user_id IN (${idList})
+        `);
+      } else {
+        usersWithPendingJobsResult = await db.execute(sql`
+          SELECT DISTINCT n.user_id 
+          FROM notifications n
+          INNER JOIN jobs j ON n.job_id = j.id
+          WHERE n.notification_type = 'INSTANT_JOB' 
+            AND n.delivery_status = 'PENDING'
+            AND n.digest_id IS NULL
+            AND n.job_id IS NOT NULL
+            AND j.status = 'ACTIVE'
+            AND j.verification_status = 'VERIFIED'
+            AND n.user_id = ${targetUserId}
+        `);
+      }
+    } else {
+      usersWithPendingJobsResult = await db.execute(sql`
+        SELECT DISTINCT n.user_id 
+        FROM notifications n
+        INNER JOIN jobs j ON n.job_id = j.id
+        WHERE n.notification_type = 'INSTANT_JOB' 
+          AND n.delivery_status = 'PENDING'
+          AND n.digest_id IS NULL
+          AND n.job_id IS NOT NULL
+          AND j.status = 'ACTIVE'
+          AND j.verification_status = 'VERIFIED'
+      `);
+    }
     
     if (usersWithPendingJobsResult.rows.length === 0) return;
     
@@ -258,18 +300,22 @@ export class WindowedDigestWorker {
       }
 
       // 4. Acquire ALL PENDING jobs and link them to this digest
-      // Use FOR UPDATE SKIP LOCKED to ensure atomic claiming of the specific jobs
+      // Use FOR UPDATE OF n SKIP LOCKED to ensure atomic claiming of the specific jobs
       const acquiredJobsResult = await db.execute(sql`
         UPDATE notifications 
         SET digest_id = ${digestRecord.id}
         WHERE id IN (
-          SELECT id FROM notifications 
-          WHERE user_id = ${user.id} 
-            AND notification_type = 'INSTANT_JOB' 
-            AND delivery_status = 'PENDING'
-            AND digest_id IS NULL
-          ORDER BY created_at ASC
-          FOR UPDATE SKIP LOCKED
+          SELECT n.id FROM notifications n
+          INNER JOIN jobs j ON n.job_id = j.id
+          WHERE n.user_id = ${user.id} 
+            AND n.notification_type = 'INSTANT_JOB' 
+            AND n.delivery_status = 'PENDING'
+            AND n.digest_id IS NULL
+            AND n.job_id IS NOT NULL
+            AND j.status = 'ACTIVE'
+            AND j.verification_status = 'VERIFIED'
+          ORDER BY n.created_at ASC
+          FOR UPDATE OF n SKIP LOCKED
         )
         RETURNING id, job_id
       `);
@@ -283,11 +329,15 @@ export class WindowedDigestWorker {
       // Check if there are MORE pending jobs we didn't pick up
       const [remainingCountResult] = (await db.execute(sql`
         SELECT count(*) as count 
-        FROM notifications 
-        WHERE user_id = ${user.id} 
-          AND notification_type = 'INSTANT_JOB' 
-          AND delivery_status = 'PENDING'
-          AND digest_id IS NULL
+        FROM notifications n
+        INNER JOIN jobs j ON n.job_id = j.id
+        WHERE n.user_id = ${user.id} 
+          AND n.notification_type = 'INSTANT_JOB' 
+          AND n.delivery_status = 'PENDING'
+          AND n.digest_id IS NULL
+          AND n.job_id IS NOT NULL
+          AND j.status = 'ACTIVE'
+          AND j.verification_status = 'VERIFIED'
       `)).rows;
       const additionalMatchesCount = Number(remainingCountResult?.count || 0);
 
@@ -339,7 +389,7 @@ export class WindowedDigestWorker {
       return;
     }
 
-    // Fetch rich job data for valid job IDs
+    // Fetch rich job data for valid job IDs — ONLY ACTIVE + VERIFIED (strictly prevent ghost jobs)
     const validJobIds = acquiredNotifs
       .map((n) => n.jobId)
       .filter((id): id is string => Boolean(id));
@@ -360,7 +410,13 @@ export class WindowedDigestWorker {
           })
           .from(schema.jobs)
           .innerJoin(schema.companies, eq(schema.jobs.company_id, schema.companies.id))
-          .where(inArray(schema.jobs.id, validJobIds))
+          .where(
+            and(
+              inArray(schema.jobs.id, validJobIds),
+              eq(schema.jobs.status, 'ACTIVE'),
+              eq(schema.jobs.verification_status, 'VERIFIED')
+            )
+          )
       : [];
 
     const fetchedJobMap = new Map(jobsData.map((j) => [j.id, j]));
@@ -370,19 +426,23 @@ export class WindowedDigestWorker {
     if (unmatchedNotifs.length > 0) {
       log.warn(
         { digestId, acquired: acquiredNotifs.length, fetched: matchedNotifs.length, unmatched: unmatchedNotifs.length },
-        'Discrepancy: some acquired jobs could not be fetched. Releasing unmatched notifications to PENDING.'
+        'Discrepancy: some acquired jobs could not be fetched or are no longer ACTIVE + VERIFIED. Marking orphaned/unverified notifications as FAILED_PERMANENT.'
       );
       const unmatchedIds = unmatchedNotifs.map((n) => n.id);
       await db.transaction(async (tx) => {
         await tx
           .update(schema.notifications)
-          .set({ digest_id: null })
+          .set({
+            digest_id: null,
+            delivery_status: 'FAILED_PERMANENT',
+            failure_reason: 'Job is missing or no longer ACTIVE and VERIFIED (ghost or closed job excluded)',
+          })
           .where(inArray(schema.notifications.id, unmatchedIds));
       });
     }
 
     if (jobsData.length === 0) {
-      await this.markDigestPermanentFailure(digestId, 'Jobs not found in DB');
+      await this.markDigestPermanentFailure(digestId, 'No ACTIVE and VERIFIED jobs found to deliver in digest');
       return;
     }
 

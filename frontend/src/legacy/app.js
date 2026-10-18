@@ -1455,7 +1455,7 @@ function renderDashboardHome() {
                   '<div>' +
                     '<div class="workspace-recent-card-company">' + company + '</div>' +
                     '<div class="workspace-recent-card-title">' + title + '</div>' +
-                    '<div style="font-size:0.8rem; color:#64748b;">📍 ' + location + '</div>' +
+                    '<div style="font-size:0.8rem; color:#475569;">📍 ' + location + '</div>' +
                   '</div>' +
                   '<div class="workspace-recent-card-meta">' +
                     '<span>' + (viewTime ? 'Viewed ' + viewTime : '') + '</span>' +
@@ -1519,15 +1519,41 @@ function renderDashboardHome() {
   var user = apiClient.getUser();
   var greeting = user && user.name ? 'Welcome back, ' + escapeHtml(user.name.split(' ')[0]) + '.' : 'Welcome to your Workspace.';
 
+  var skeletonStatsHtml = (
+    '<div class="workspace-stats-grid" aria-busy="true">' +
+      '<div class="workspace-stat-card">' +
+        '<div class="workspace-stat-header"><span class="workspace-stat-label">Saved Jobs</span><span class="workspace-stat-icon">♥</span></div>' +
+        '<div class="workspace-stat-num" style="opacity:0.25;">—</div>' +
+        '<span class="workspace-stat-link" style="opacity:0.4;">Loading...</span>' +
+      '</div>' +
+      '<div class="workspace-stat-card">' +
+        '<div class="workspace-stat-header"><span class="workspace-stat-label">Applications</span><span class="workspace-stat-icon">📋</span></div>' +
+        '<div class="workspace-stat-num" style="opacity:0.25;">—</div>' +
+        '<span class="workspace-stat-link" style="opacity:0.4;">Loading...</span>' +
+      '</div>' +
+      '<div class="workspace-stat-card">' +
+        '<div class="workspace-stat-header"><span class="workspace-stat-label">Recently Viewed</span><span class="workspace-stat-icon">👁️</span></div>' +
+        '<div class="workspace-stat-num" style="opacity:0.25;">—</div>' +
+        '<span class="workspace-stat-link" style="opacity:0.4;">Loading...</span>' +
+      '</div>' +
+    '</div>'
+  );
+
+  var skeletonFeedHtml = (
+    '<div style="min-height: 280px;" aria-busy="true">' +
+      loadingHtml('Finding verified jobs matching your profile...') +
+    '</div>'
+  );
+
   return (
     '<div class="app-dashboard-home">' +
       '<div class="dashboard-greeting">' +
         '<h1 class="kn-heading-1">' + greeting + '</h1>' +
         '<p class="dashboard-tagline">Your personal job-seeker workspace — track, save, and manage verified opportunities.</p>' +
       '</div>' +
-      '<div id="dashboard-stats-slot"></div>' +
+      '<div id="dashboard-stats-slot">' + skeletonStatsHtml + '</div>' +
       '<div id="dashboard-prefs-slot"></div>' +
-      '<div id="dashboard-matched-feed-slot"></div>' +
+      '<div id="dashboard-matched-feed-slot">' + skeletonFeedHtml + '</div>' +
       '<div id="dashboard-recent-slot"></div>' +
     '</div>'
   );
@@ -3193,11 +3219,29 @@ function render() {
     case 'profile':
     case 'verified-jobs':
     case 'dashboard':
+      container.innerHTML = renderDashboardLayout(path);
+      bindDashboardEvents();
+      break;
     case 'resume':
+      container.innerHTML = renderDashboardLayout(path);
+      bindDashboardEvents();
+      import('../dashboard/resume/main-resume').then(function (m) {
+        if (m.mountResumeBuilder) m.mountResumeBuilder();
+      }).catch(function (e) { console.error('Failed to load resume builder', e); });
+      break;
     case 'prep':
+      container.innerHTML = renderDashboardLayout(path);
+      bindDashboardEvents();
+      import('../dashboard/prep/main-prep').then(function (m) {
+        if (m.mountPrep) m.mountPrep();
+      }).catch(function (e) { console.error('Failed to load placement prep', e); });
+      break;
     case 'admin':
       container.innerHTML = renderDashboardLayout(path);
       bindDashboardEvents();
+      import('../dashboard/admin/main-admin').then(function (m) {
+        if (m.mountAdminConsole) m.mountAdminConsole();
+      }).catch(function (e) { console.error('Failed to load admin console', e); });
       break;
     default:
       container.innerHTML = renderLanding();
@@ -3407,7 +3451,11 @@ function setupNav() {
 // App init
 // ─────────────────────────────────────────────────────────────────────────────
 
+var appInitialized = false;
+
 export function initApp() {
+  if (appInitialized) return;
+  appInitialized = true;
   updateNavVisibility();
   render();
   window.addEventListener('hashchange', render);

@@ -4,7 +4,7 @@ import ResumePage from '../../modules/resume/ResumePage';
 import '../../modules/resume/index.css';
 
 // Function to mount the app
-const mountResumeBuilder = () => {
+export const mountResumeBuilder = () => {
     console.log('[Resume] Attempting to mount...');
     const rootElement = document.getElementById('resume-builder-root');
     if (rootElement) {
@@ -25,17 +25,8 @@ const mountResumeBuilder = () => {
     }
 };
 
-// Observer to watch for the container injection
-const observer = new MutationObserver((_mutations) => {
-    if (document.getElementById('resume-builder-root')) {
-        mountResumeBuilder();
-    }
-});
+// Immediate mount if target exists in DOM
+if (typeof document !== 'undefined' && document.getElementById('resume-builder-root')) {
+    mountResumeBuilder();
+}
 
-observer.observe(document.body, {
-    childList: true,
-    subtree: true
-});
-
-// Initial check
-mountResumeBuilder();
