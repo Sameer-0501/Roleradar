@@ -14,3 +14,9 @@ scratch/
 frontend/scratch/
 .gemini/
 *.log
+
+# AI agent tooling & runtime artifacts
+.agents/
+.agent/
+.gsd/
+.archify/
