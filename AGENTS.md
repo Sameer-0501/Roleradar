@@ -25,3 +25,9 @@ Whenever completing any task, implementation plan, walkthrough, competitive anal
 2. **Always write deliverables and reports exclusively to the dedicated IDE Artifact directory** (`<appDataDir>\brain\<conversation-id>\`).
 3. Keep the project repository clean of non-code artifacts and untracked documentation files unless explicitly requested by the user.
 
+## 3. Git Push Policy — Strict Permission Required
+
+1. **Never execute `git push` without explicit user permission.**
+2. All commits and staged changes must remain in the local Git repository until the user explicitly directs or authorizes a push to the remote repository (`origin`).
+
+
