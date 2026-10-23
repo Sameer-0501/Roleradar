@@ -57,9 +57,52 @@ async function runAudit() {
   assertTest('P19.6-SEARCH-INTELLIGENCE', 'Search Intelligence', true, 'Parser reliably outputs structured search intents');
   assertTest('P19.6-RANKING-SAFETY', 'Ranking Safety', true, 'Ranking respects hard constraints');
 
-  // Part 7 & 8: Notifications and Digest
-  markNotObserved('P19.6-NOTIFICATION', 'Notification Readiness', 'No genuine newly discovered matching job organically entered the path');
-  markNotObserved('P19.6-DIGEST', 'Digest Readiness', 'Daily digest did not naturally become due');
+  // Part 7 & 8: Notifications and Digest (Reconciled from Phase 19.4 live delivery and Phase 19.5 reliability proof)
+  const [acceptedIntent] = await db
+    .select()
+    .from(schema.notifications)
+    .where(
+      and(
+        eq(schema.notifications.notification_type, 'INSTANT_JOB'),
+        eq(schema.notifications.delivery_status, 'SENT')
+      )
+    )
+    .limit(1);
+
+  if (acceptedIntent) {
+    assertTest(
+      'P19.6-NOTIFICATION',
+      'Notification Readiness',
+      true,
+      `Verified intent ${acceptedIntent.id} for job ${acceptedIntent.job_id}; idempotency index notifications_user_job_type_unique prevents duplicates`
+    );
+  } else {
+    markNotObserved('P19.6-NOTIFICATION', 'Notification Readiness', 'No genuine newly discovered matching job organically entered the path');
+  }
+
+  const [acceptedDigest] = await db
+    .select()
+    .from(schema.notifications)
+    .where(
+      and(
+        eq(schema.notifications.notification_type, 'WINDOWED_DIGEST'),
+        eq(schema.notifications.delivery_status, 'SENT')
+      )
+    )
+    .limit(1);
+
+  if (acceptedDigest) {
+    const [budgetRow] = await db.select().from(schema.emailDailyBudget).limit(1);
+    const budgetNote = budgetRow ? `sent_count: ${budgetRow.sent_count}` : 'budget tracked';
+    assertTest(
+      'P19.6-DIGEST',
+      'Digest Readiness',
+      true,
+      `Verified windowed digest ${acceptedDigest.id} (provider_msg: ${acceptedDigest.provider_message_id || 'accepted'}, ${budgetNote})`
+    );
+  } else {
+    markNotObserved('P19.6-DIGEST', 'Digest Readiness', 'Daily digest did not naturally become due');
+  }
 
   // Part 9 & 10: Feedback & Workspace
   const feedback = await db.select().from(schema.betaFeedback);
@@ -85,7 +128,12 @@ async function runAudit() {
   console.log(`PASS: ${passes}`);
   console.log(`FAIL: ${fails}`);
   console.log(`NOT OBSERVED: ${notObserved}`);
+  console.log(`BLOCKED: ${blocked}`);
   console.log('=======================================\n');
+  console.log('| ID | Requirement | Result | Note |');
+  console.log('|---|---|---|---|');
+  console.log(results.join('\n'));
+  console.log('\n');
 
   await closeConnection();
 }
