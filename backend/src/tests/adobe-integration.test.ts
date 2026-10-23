@@ -36,7 +36,7 @@ vi.mock('../notifications/alert-service.js', () => ({
 
 import { getDb, closeConnection } from '../database/connection.js';
 import { schema } from '../database/index.js';
-import { eq, and, sql, inArray } from 'drizzle-orm';
+import { eq, and, sql, inArray, desc } from 'drizzle-orm';
 import { WorkdayCollector } from '../collectors/ats/workday-collector.js';
 import { runPipeline } from '../pipeline/pipeline.js';
 import { seedSources } from '../pipeline/source-seeder.js';
@@ -227,7 +227,8 @@ describe('Adobe Workday Controlled Integration', () => {
       const verifications = await db
         .select()
         .from(schema.jobVerifications)
-        .where(eq(schema.jobVerifications.job_id, job.id));
+        .where(eq(schema.jobVerifications.job_id, job.id))
+        .orderBy(desc(schema.jobVerifications.checked_at));
 
       expect(verifications.length).toBeGreaterThan(0);
       expect(verifications[0]!.domain_check).toBe(true);
