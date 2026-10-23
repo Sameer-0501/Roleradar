@@ -5,56 +5,29 @@
  * and Relevance-Ranked Job Matches against the RoleRadar backend API.
  */
 
-const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL)
-  ? import.meta.env.VITE_API_URL
-  : 'http://localhost:4000/api';
-const TOKEN_KEY = 'roleradar_auth_token';
-const USER_KEY = 'roleradar_auth_user';
+import { httpClient, preferencesService, jobsService, workspaceService, alertsService, profileService, TOKEN_KEY, USER_KEY, ApiError } from '../services/api/index.js';
+
+export { TOKEN_KEY, USER_KEY, ApiError, preferencesService, jobsService, workspaceService, alertsService, profileService };
 
 export const apiClient = {
   getToken() {
-    return localStorage.getItem(TOKEN_KEY);
+    return httpClient.getToken();
   },
 
   setAuth(token, user) {
-    localStorage.setItem(TOKEN_KEY, token);
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    httpClient.setAuth(token, user);
   },
 
   clearAuth() {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
+    httpClient.clearAuth();
   },
 
   getUser() {
-    try {
-      const raw = localStorage.getItem(USER_KEY);
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
-    }
+    return httpClient.getUser();
   },
 
   async request(endpoint, options = {}) {
-    const token = this.getToken();
-    const headers = {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    };
-
-    const res = await fetch(`${API_BASE}${endpoint}`, {
-      ...options,
-      headers,
-    });
-
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      const errorMsg = data.details ? data.details.join(', ') : data.error || 'Request failed';
-      throw new Error(errorMsg);
-    }
-
-    return data;
+    return httpClient.request(endpoint, options);
   },
 
   // ── Auth ──────────────────────────────────────────────────────────────────
@@ -114,8 +87,7 @@ export const apiClient = {
   // ── Companies ─────────────────────────────────────────────────────────────
 
   async getCompanies() {
-    const data = await this.request('/companies');
-    return data.companies || [];
+    return preferencesService.getCompanies();
   },
 
   // ── Taxonomy ──────────────────────────────────────────────────────────────
@@ -126,281 +98,172 @@ export const apiClient = {
   },
 
   async getCanonicalTaxonomy() {
-    const data = await this.request('/preferences/canonical-taxonomy');
-    return data;
+    return preferencesService.getCanonicalTaxonomy();
   },
 
   async getMigrationPreview() {
-    const data = await this.request('/users/me/preferences/migration-preview');
-    return data;
+    return preferencesService.getMigrationPreview();
   },
 
   // ── Preferences ───────────────────────────────────────────────────────────
 
   async getPreferences() {
-    const data = await this.request('/users/me/preferences');
-    if (data && data.preferences) {
-      return {
-        ...data.preferences,
-        onboardingCompleted: data.onboardingCompleted ?? data.preferences.onboardingCompleted,
-      };
-    }
-    return data;
+    return preferencesService.getPreferences();
   },
 
   async savePreferences(preferences) {
-    const data = await this.request('/users/me/preferences', {
-      method: 'PUT',
-      body: JSON.stringify(preferences),
-    });
-    return data.preferences;
+    return preferencesService.savePreferences(preferences);
   },
 
   async completeOnboarding() {
-    const data = await this.request('/users/me/preferences/complete', {
-      method: 'POST',
-    });
-    return data;
+    return preferencesService.completeOnboarding();
   },
 
   // ── Notifications / Alerts ───────────────────────────────────────────────
 
   async getNotifications(page = 1, limit = 20) {
-    const data = await this.request(`/notifications?page=${page}&limit=${limit}`);
-    return data;
+    return alertsService.getNotifications(page, limit);
   },
 
   async getUnreadCount() {
-    const data = await this.request('/notifications/unread-count');
-    return data.unreadCount || 0;
+    return alertsService.getUnreadCount();
   },
 
   async markNotificationRead(id) {
-    const data = await this.request(`/notifications/${id}/read`, {
-      method: 'PUT',
-    });
-    return data;
+    return alertsService.markNotificationRead(id);
   },
 
   async markAllNotificationsRead() {
-    const data = await this.request('/notifications/read-all', {
-      method: 'POST',
-    });
-    return data;
+    return alertsService.markAllNotificationsRead();
   },
 
   async retryNotification(id) {
-    const data = await this.request(`/notifications/${id}/retry`, {
-      method: 'POST',
-    });
-    return data;
+    return alertsService.retryNotification(id);
   },
 
   // ── Job Feed & Matches (Phase 9 Ranked) ───────────────────────────────────
 
   async getMatchedJobs(pageOrOptions = 1, limit = 20) {
-    let queryParams = new URLSearchParams();
-
     if (typeof pageOrOptions === 'object') {
-      const opts = pageOrOptions;
-      if (opts.page) queryParams.set('page', String(opts.page));
-      if (opts.limit) queryParams.set('limit', String(opts.limit));
-      if (opts.sort) queryParams.set('sort', opts.sort);
-      if (opts.roleFilter) queryParams.set('roleFilter', opts.roleFilter);
-      if (opts.q) queryParams.set('q', opts.q);
-      if (opts.workplace && opts.workplace !== 'ANY') queryParams.set('workplace', opts.workplace);
-      if (opts.freshness && opts.freshness !== 'ALL') queryParams.set('freshness', opts.freshness);
-      if (opts.country) queryParams.set('country', opts.country);
-      if (opts.location) queryParams.set('location', opts.location);
-      if (opts.experience) queryParams.set('experience', opts.experience);
-      if (opts.companyId) queryParams.set('companyId', opts.companyId);
-      if (opts.isToday) queryParams.set('onlyToday', 'true');
-    } else {
-      queryParams.set('page', String(pageOrOptions));
-      queryParams.set('limit', String(limit));
+      return jobsService.getMatchedJobs(pageOrOptions);
     }
-
-    const data = await this.request(`/jobs/matches?${queryParams.toString()}`);
-    return data;
+    return jobsService.getMatchedJobs({ page: pageOrOptions, limit });
   },
 
   async getSearchSuggestions(query = '', limit = 8) {
-    const data = await this.request(`/search/suggestions?q=${encodeURIComponent(query)}&limit=${limit}`);
-    return data.suggestions || [];
+    return jobsService.getSearchSuggestions(query, limit);
   },
 
   async explainSearchIntent(query) {
-    const data = await this.request('/search/explain', {
-      method: 'POST',
-      body: JSON.stringify({ query }),
-    });
-    return data;
+    return jobsService.explainSearchIntent(query);
   },
 
   async getTodayMatchedJobs(page = 1, limit = 20) {
-    const data = await this.request(`/jobs/matches/today?page=${page}&limit=${limit}`);
-    return data;
+    return jobsService.getTodayMatchedJobs(page, limit);
   },
 
   async getVerifiedJobs(page = 1, limit = 20, days = null) {
-    let url = `/jobs/verified?page=${page}&limit=${limit}`;
-    if (days) url += `&days=${days}`;
-    const data = await this.request(url);
-    return data;
+    return jobsService.getVerifiedJobs(page, limit, days);
   },
 
   async getJobById(jobId) {
-    const data = await this.request(`/jobs/${jobId}`);
-    return data;
+    return jobsService.getJobById(jobId);
   },
 
   // ── Personal Job-Seeker Workspace ────────────────────────────────────────
 
   async saveJob(jobId) {
-    const data = await this.request(`/jobs/${jobId}/save`, { method: 'POST' });
-    return data.interaction;
+    return workspaceService.saveJob(jobId);
   },
 
   async unsaveJob(jobId) {
-    const data = await this.request(`/jobs/${jobId}/save`, { method: 'DELETE' });
-    return data.interaction;
+    return workspaceService.unsaveJob(jobId);
   },
 
   async markJobApplied(jobId) {
-    const data = await this.request(`/jobs/${jobId}/apply`, { method: 'POST' });
-    return data.interaction;
+    return workspaceService.markJobApplied(jobId);
   },
 
   async unmarkJobApplied(jobId) {
-    const data = await this.request(`/jobs/${jobId}/apply`, { method: 'DELETE' });
-    return data.interaction;
+    return workspaceService.unmarkJobApplied(jobId);
   },
 
   async dismissJob(jobId) {
-    const data = await this.request(`/jobs/${jobId}/dismiss`, { method: 'POST' });
-    return data.interaction;
+    return workspaceService.dismissJob(jobId);
   },
 
   async restoreJob(jobId) {
-    const data = await this.request(`/jobs/${jobId}/dismiss`, { method: 'DELETE' });
-    return data.interaction;
+    return workspaceService.restoreJob(jobId);
   },
 
   async recordJobView(jobId) {
-    const data = await this.request(`/jobs/${jobId}/view`, { method: 'POST' });
-    return data.interaction;
+    return workspaceService.recordJobView(jobId);
   },
 
   async setJobNotes(jobId, notes) {
-    const data = await this.request(`/jobs/${jobId}/notes`, {
-      method: 'PUT',
-      body: JSON.stringify({ notes }),
-    });
-    return data.interaction;
+    return workspaceService.setJobNotes(jobId, notes);
   },
 
   async deleteJobNotes(jobId) {
-    const data = await this.request(`/jobs/${jobId}/notes`, { method: 'DELETE' });
-    return data.interaction;
+    return workspaceService.deleteJobNotes(jobId);
   },
 
   async getJobInteraction(jobId) {
-    const data = await this.request(`/jobs/${jobId}/interaction`);
-    return data.interaction;
+    return workspaceService.getJobInteraction(jobId);
   },
 
   async getSavedJobs(options = {}) {
-    const params = new URLSearchParams();
-    if (options.status) params.set('status', options.status);
-    if (options.applied) params.set('applied', options.applied);
-    if (options.q) params.set('q', options.q);
-    if (options.page) params.set('page', String(options.page));
-    if (options.limit) params.set('limit', String(options.limit));
-    const data = await this.request(`/users/me/saved-jobs?${params.toString()}`);
-    return data;
+    return workspaceService.getSavedJobs(options);
   },
 
   async getAppliedJobs(options = {}) {
-    const params = new URLSearchParams();
-    if (options.status) params.set('status', options.status);
-    if (options.q) params.set('q', options.q);
-    if (options.page) params.set('page', String(options.page));
-    if (options.limit) params.set('limit', String(options.limit));
-    const data = await this.request(`/users/me/applications?${params.toString()}`);
-    return data;
+    return workspaceService.getAppliedJobs(options);
   },
 
   async getDismissedJobs(options = {}) {
-    const params = new URLSearchParams();
-    if (options.q) params.set('q', options.q);
-    if (options.page) params.set('page', String(options.page));
-    if (options.limit) params.set('limit', String(options.limit));
-    const data = await this.request(`/users/me/dismissed-jobs?${params.toString()}`);
-    return data;
+    return workspaceService.getDismissedJobs(options);
   },
 
   async getRecentlyViewedJobs(limit = 10) {
-    const data = await this.request(`/users/me/recently-viewed?limit=${limit}`);
-    return data;
+    return workspaceService.getRecentlyViewedJobs(limit);
   },
 
   async getWorkspaceStats() {
-    const data = await this.request('/users/me/workspace-stats');
-    return data;
+    return workspaceService.getWorkspaceStats();
   },
 
   // ── Phase 13: Candidate Profile & Resume Intelligence ──────────────────────
 
   async getCandidateProfile() {
-    const data = await this.request('/profile');
-    return data.profile;
+    return profileService.getCandidateProfile();
   },
 
   async updateCandidateProfile(profileData) {
-    const data = await this.request('/profile', {
-      method: 'PUT',
-      body: JSON.stringify(profileData),
-    });
-    return data.profile;
+    return profileService.updateCandidateProfile(profileData);
   },
 
   async uploadResume(payload) {
-    const data = await this.request('/profile/resumes', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-    return data;
+    return profileService.uploadResume(payload);
   },
 
   async listResumes() {
-    const data = await this.request('/profile/resumes');
-    return data.resumes || [];
+    return profileService.listResumes();
   },
 
   async activateResume(resumeId) {
-    const data = await this.request(`/profile/resumes/${resumeId}/activate`, {
-      method: 'POST',
-    });
-    return data;
+    return profileService.activateResume(resumeId);
   },
 
   async deleteResume(resumeId) {
-    const data = await this.request(`/profile/resumes/${resumeId}`, {
-      method: 'DELETE',
-    });
-    return data;
+    return profileService.deleteResume(resumeId);
   },
 
   async getProfileCompleteness() {
-    const data = await this.request('/profile/completeness');
-    return data.completeness;
+    return profileService.getProfileCompleteness();
   },
 
   async compareJobWithProfile(jobId) {
-    const data = await this.request(`/profile/compare-job/${jobId}`, {
-      method: 'POST',
-    });
-    return data;
+    return profileService.compareJobWithProfile(jobId);
   },
 
   // ── Phase 14: Application Intelligence & Assistant ────────────────────────

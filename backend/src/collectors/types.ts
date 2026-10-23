@@ -23,6 +23,7 @@ export interface WorkdaySourceConfig {
   clientSite?: string;
   maxPages?: number;
   appliedFacets?: Record<string, string[]>;
+  sourceUrl?: string;
 }
 
 export interface AshbySourceConfig {

@@ -163,6 +163,7 @@ describe('Phase 20.5 Batch 2 Workday Expansion: Fractal, Omnissa, Piramal, Eleva
     describe(`${emp.name} Workday Integration`, () => {
       it(`Health check connectivity succeeds for ${emp.name}`, async () => {
         const collector = new WorkdayCollector({
+          companyName: emp.name,
           ...emp.workdayConfig,
           pageSize: 5,
           maxPages: 1,
@@ -175,6 +176,7 @@ describe('Phase 20.5 Batch 2 Workday Expansion: Fractal, Omnissa, Piramal, Eleva
 
       it(`Correctly assesses scan completeness (isFaceted=${emp.isFaceted}) for ${emp.name}`, () => {
         const collector = new WorkdayCollector({
+          companyName: emp.name,
           ...emp.workdayConfig,
           pageSize: 5,
           maxPages: 1,
@@ -185,6 +187,7 @@ describe('Phase 20.5 Batch 2 Workday Expansion: Fractal, Omnissa, Piramal, Eleva
 
       it(`Discovers bounded jobs with authoritative requisition IDs for ${emp.name}`, async () => {
         const collector = new WorkdayCollector({
+          companyName: emp.name,
           ...emp.workdayConfig,
           pageSize: 5,
           maxPages: 1,
@@ -217,6 +220,7 @@ describe('Phase 20.5 Batch 2 Workday Expansion: Fractal, Omnissa, Piramal, Eleva
 
       it(`Executes full pipeline and persists verified ACTIVE jobs for ${emp.name}`, async () => {
         const collector = new WorkdayCollector({
+          companyName: emp.name,
           ...emp.workdayConfig,
           pageSize: 5,
           maxPages: 1,
@@ -270,6 +274,7 @@ describe('Phase 20.5 Batch 2 Workday Expansion: Fractal, Omnissa, Piramal, Eleva
 
       it(`Repeat scan is idempotent and creates 0 duplicates for ${emp.name}`, async () => {
         const collector = new WorkdayCollector({
+          companyName: emp.name,
           ...emp.workdayConfig,
           pageSize: 5,
           maxPages: 1,

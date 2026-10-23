@@ -216,6 +216,148 @@ export async function getCandidateProfile(userId: string): Promise<CandidateProf
   };
 }
 
+export const ALLOWED_RESUME_EXTENSIONS = ['.pdf', '.docx', '.txt'] as const;
+
+export interface ValidatedResumeInfo {
+  safeExt: string;
+  sanitizedFilename: string;
+  canonicalMime: string;
+}
+
+/**
+ * Validates resume file extension, file size, signatures (magic bytes), and MIME types.
+ * Rejects path-traversal attempts, unsupported extensions, and spoofed binary files.
+ */
+export function validateResumeFile(
+  filename: string,
+  fileBuffer: Buffer,
+  declaredMimeType?: string
+): ValidatedResumeInfo {
+  if (!filename || typeof filename !== 'string') {
+    throw new Error('Filename is required.');
+  }
+
+  // Prevent path traversal and control character injection in filename
+  if (filename.includes('\0')) {
+    throw new Error('Invalid filename: null bytes detected.');
+  }
+
+  const rawExt = path.extname(filename).toLowerCase().trim();
+  if (!ALLOWED_RESUME_EXTENSIONS.includes(rawExt as any)) {
+    throw new Error(
+      `Unsupported file format "${rawExt || 'unknown'}". Only .pdf, .docx, and .txt files are supported.`
+    );
+  }
+
+  // File size bounds
+  if (fileBuffer.length === 0) {
+    throw new Error('File is empty.');
+  }
+  const MAX_SIZE = 5 * 1024 * 1024;
+  if (fileBuffer.length > MAX_SIZE) {
+    throw new Error('File size exceeds maximum limit of 5MB.');
+  }
+
+  const normMime = declaredMimeType?.toLowerCase().trim();
+  let canonicalMime = '';
+
+  if (rawExt === '.pdf') {
+    // PDF Magic Bytes: %PDF- (0x25 0x50 0x44 0x46)
+    const isPdfMagic =
+      fileBuffer.length >= 4 &&
+      fileBuffer[0] === 0x25 &&
+      fileBuffer[1] === 0x50 &&
+      fileBuffer[2] === 0x44 &&
+      fileBuffer[3] === 0x46;
+
+    if (!isPdfMagic) {
+      throw new Error('Invalid file signature. File is not a valid PDF document.');
+    }
+
+    if (normMime && !['application/pdf', 'application/x-pdf', 'application/octet-stream'].includes(normMime)) {
+      throw new Error(`Inconsistent MIME type "${declaredMimeType}" for PDF document.`);
+    }
+    canonicalMime = 'application/pdf';
+  } else if (rawExt === '.docx') {
+    // DOCX (ZIP archive) Magic Bytes: PK\x03\x04 (0x50 0x4B 0x03 0x04)
+    const isZipMagic =
+      fileBuffer.length >= 4 &&
+      fileBuffer[0] === 0x50 &&
+      fileBuffer[1] === 0x4B &&
+      fileBuffer[2] === 0x03 &&
+      fileBuffer[3] === 0x04;
+
+    if (!isZipMagic) {
+      throw new Error('Invalid file signature. File is not a valid Word document (.docx).');
+    }
+
+    if (
+      normMime &&
+      ![
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/zip',
+        'application/x-zip-compressed',
+        'application/octet-stream',
+      ].includes(normMime)
+    ) {
+      throw new Error(`Inconsistent MIME type "${declaredMimeType}" for DOCX document.`);
+    }
+    canonicalMime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  } else if (rawExt === '.txt') {
+    // Reject known executable magic signatures:
+    // MZ (Windows PE): 0x4D 0x5A
+    if (fileBuffer.length >= 2 && fileBuffer[0] === 0x4d && fileBuffer[1] === 0x5a) {
+      throw new Error('Invalid text file: binary executable signature detected (MZ).');
+    }
+    // ELF (Linux): 0x7F 0x45 0x4C 0x46
+    if (
+      fileBuffer.length >= 4 &&
+      fileBuffer[0] === 0x7f &&
+      fileBuffer[1] === 0x45 &&
+      fileBuffer[2] === 0x4c &&
+      fileBuffer[3] === 0x46
+    ) {
+      throw new Error('Invalid text file: binary executable signature detected (ELF).');
+    }
+    // Mach-O
+    if (
+      fileBuffer.length >= 4 &&
+      ((fileBuffer[0] === 0xca && fileBuffer[1] === 0xfe && fileBuffer[2] === 0xba && fileBuffer[3] === 0xbe) ||
+        (fileBuffer[0] === 0xcf && fileBuffer[1] === 0xfa && fileBuffer[2] === 0xed && fileBuffer[3] === 0xfe))
+    ) {
+      throw new Error('Invalid text file: binary executable signature detected.');
+    }
+
+    // Inspect first 1024 bytes for null bytes (binary file check)
+    const sampleLimit = Math.min(fileBuffer.length, 1024);
+    for (let i = 0; i < sampleLimit; i++) {
+      if (fileBuffer[i] === 0x00) {
+        throw new Error('Invalid text file: binary characters detected.');
+      }
+    }
+
+    // HTML / Script tag check to prevent stored XSS smuggling in text resumes
+    const sampleText = fileBuffer.slice(0, 512).toString('utf-8').toLowerCase();
+    if (sampleText.includes('<script') || sampleText.includes('<!doctype html') || sampleText.includes('<html')) {
+      throw new Error('Invalid text file: HTML tags detected.');
+    }
+
+    if (normMime && !['text/plain', 'text/markdown', 'application/octet-stream'].includes(normMime)) {
+      throw new Error(`Inconsistent MIME type "${declaredMimeType}" for text document.`);
+    }
+    canonicalMime = 'text/plain';
+  }
+
+  // Sanitize filename to avoid path traversal in stored metadata
+  const sanitizedFilename = path.basename(filename).replace(/[^\w.-]/g, '_').slice(0, 255);
+
+  return {
+    safeExt: rawExt,
+    sanitizedFilename: sanitizedFilename || `resume${rawExt}`,
+    canonicalMime,
+  };
+}
+
 /**
  * Upload and parse a resume file for a user.
  */
@@ -227,11 +369,8 @@ export async function uploadAndParseResume(
 ): Promise<{ resume: ResumeMetadataDto; profile: CandidateProfileDto }> {
   const db = getDb();
 
-  // Validate size (max 5MB)
-  const MAX_SIZE = 5 * 1024 * 1024;
-  if (fileBuffer.length > MAX_SIZE) {
-    throw new Error('File size exceeds maximum limit of 5MB');
-  }
+  // Validate format, magic bytes, size, and MIME type
+  const validated = validateResumeFile(filename, fileBuffer, mimeType);
 
   // Create private user storage directory
   const userStorageDir = path.join(RESUME_STORAGE_DIR, userId);
@@ -240,8 +379,7 @@ export async function uploadAndParseResume(
   }
 
   const resumeId = crypto.randomUUID();
-  const safeExt = path.extname(filename) || '.pdf';
-  const storagePath = path.join(userStorageDir, `${resumeId}${safeExt}`);
+  const storagePath = path.join(userStorageDir, `${resumeId}${validated.safeExt}`);
 
   // Write file to private storage
   fs.writeFileSync(storagePath, fileBuffer);
@@ -262,9 +400,9 @@ export async function uploadAndParseResume(
     .values({
       id: resumeId,
       user_id: userId,
-      filename,
+      filename: validated.sanitizedFilename,
       file_size: fileBuffer.length,
-      mime_type: mimeType,
+      mime_type: validated.canonicalMime,
       storage_path: storagePath,
       parsed_text: rawText.slice(0, 10000), // bounded preview
       is_active: true,

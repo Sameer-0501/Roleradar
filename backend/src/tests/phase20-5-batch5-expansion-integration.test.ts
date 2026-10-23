@@ -160,7 +160,6 @@ describe('Phase 20.5 Batch 5 Workday Expansion: Genpact, Abbott, General Mills, 
       it(`Health check connectivity succeeds for ${emp.name}`, async () => {
         const collector = new WorkdayCollector({
           companyName: emp.name,
-          sourceUrl: `https://${emp.workdayConfig.host}/${emp.workdayConfig.clientSite}`,
           ...emp.workdayConfig,
         });
 
@@ -172,7 +171,6 @@ describe('Phase 20.5 Batch 5 Workday Expansion: Genpact, Abbott, General Mills, 
       it(`Correctly assesses scan completeness (isFaceted=${emp.isFaceted}) for ${emp.name}`, () => {
         const collector = new WorkdayCollector({
           companyName: emp.name,
-          sourceUrl: `https://${emp.workdayConfig.host}/${emp.workdayConfig.clientSite}`,
           ...emp.workdayConfig,
         });
 
@@ -192,7 +190,6 @@ describe('Phase 20.5 Batch 5 Workday Expansion: Genpact, Abbott, General Mills, 
       it(`Discovers bounded jobs with authoritative requisition IDs for ${emp.name}`, async () => {
         const collector = new WorkdayCollector({
           companyName: emp.name,
-          sourceUrl: `https://${emp.workdayConfig.host}/${emp.workdayConfig.clientSite}`,
           ...emp.workdayConfig,
           pageSize: 5,
           maxPages: 1,
@@ -215,7 +212,6 @@ describe('Phase 20.5 Batch 5 Workday Expansion: Genpact, Abbott, General Mills, 
       it(`Executes full pipeline and persists verified ACTIVE jobs for ${emp.name}`, async () => {
         const collector = new WorkdayCollector({
           companyName: emp.name,
-          sourceUrl: `https://${emp.workdayConfig.host}/${emp.workdayConfig.clientSite}`,
           ...emp.workdayConfig,
           pageSize: 5,
           maxPages: 1,
@@ -270,7 +266,6 @@ describe('Phase 20.5 Batch 5 Workday Expansion: Genpact, Abbott, General Mills, 
       it(`Repeat scan is idempotent and creates 0 duplicates for ${emp.name}`, async () => {
         const collector = new WorkdayCollector({
           companyName: emp.name,
-          sourceUrl: `https://${emp.workdayConfig.host}/${emp.workdayConfig.clientSite}`,
           ...emp.workdayConfig,
           pageSize: 5,
           maxPages: 1,

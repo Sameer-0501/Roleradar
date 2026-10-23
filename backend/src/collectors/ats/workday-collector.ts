@@ -59,6 +59,8 @@ export interface WorkdaySourceConfig {
   maxPages?: number;
   /** Optional declarative facets to filter CXS search query */
   appliedFacets?: Record<string, string[]>;
+  /** Optional source URL (portal base link) */
+  sourceUrl?: string;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -187,6 +189,7 @@ export class WorkdayCollector extends BaseCollector {
       pageSize: config.pageSize ?? DEFAULT_PAGE_SIZE,
       maxPages: config.maxPages ?? DEFAULT_MAX_PAGES,
       appliedFacets: config.appliedFacets ?? {},
+      sourceUrl: config.sourceUrl ?? '',
     };
   }
 

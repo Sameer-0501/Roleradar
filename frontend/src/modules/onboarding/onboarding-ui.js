@@ -56,12 +56,17 @@ function escapeHtml(s) {
 
 export async function renderOnboardingView(containerEl, options = {}) {
   const isEditing = options.isEditing || false;
+  let isDestroyed = false;
+  let isSaving = false;
+  let handleDocClick = null;
+  let handleDocKeydown = null;
 
   let initialPrefs = null;
   // If editing, always attempt to fetch fresh preferences directly from API
   if (isEditing && apiClient.getToken()) {
     try {
       const fetched = await apiClient.getPreferences();
+      if (isDestroyed) return { destroy: () => {} };
       if (fetched) {
         initialPrefs = (fetched && fetched.preferences) ? fetched.preferences : fetched;
         localStorage.setItem('roleradar_preferences', JSON.stringify(initialPrefs));
@@ -70,6 +75,8 @@ export async function renderOnboardingView(containerEl, options = {}) {
       console.warn('Could not fetch preferences from API, falling back to options', e);
     }
   }
+
+  if (isDestroyed) return { destroy: () => {} };
 
   if (!initialPrefs) {
     initialPrefs = options.currentPreferences;
@@ -163,6 +170,7 @@ export async function renderOnboardingView(containerEl, options = {}) {
   }
 
   function updateView() {
+    if (isDestroyed) return;
     const roleInput = document.getElementById('role-search-input');
     if (roleInput && document.activeElement === roleInput) {
       wasRoleSearchFocused = true;
@@ -651,23 +659,26 @@ export async function renderOnboardingView(containerEl, options = {}) {
     }
 
     // Close on escape or outside click
-    if (!containerEl.dataset.roleDropdownEventsBound) {
-      document.addEventListener('click', (e) => {
-        const rolesContainer = containerEl.querySelector('#roles-hierarchy-container');
-        const browseBtn = containerEl.querySelector('#btn-browse-roles');
-        if (isRoleDropdownOpen && rolesContainer && browseBtn) {
-          if (!rolesContainer.contains(e.target) && !browseBtn.contains(e.target)) {
-            isRoleDropdownOpen = false;
-            updateView();
-          }
-        }
-      });
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && isRoleDropdownOpen) {
+    handleDocClick = (e) => {
+      const rolesContainer = containerEl.querySelector('#roles-hierarchy-container');
+      const browseBtn = containerEl.querySelector('#btn-browse-roles');
+      if (isRoleDropdownOpen && rolesContainer && browseBtn) {
+        if (!rolesContainer.contains(e.target) && !browseBtn.contains(e.target)) {
           isRoleDropdownOpen = false;
           updateView();
         }
-      });
+      }
+    };
+    handleDocKeydown = (e) => {
+      if (e.key === 'Escape' && isRoleDropdownOpen) {
+        isRoleDropdownOpen = false;
+        updateView();
+      }
+    };
+
+    if (!containerEl.dataset.roleDropdownEventsBound) {
+      document.addEventListener('click', handleDocClick);
+      document.addEventListener('keydown', handleDocKeydown);
       containerEl.dataset.roleDropdownEventsBound = 'true';
     }
 
@@ -857,6 +868,8 @@ export async function renderOnboardingView(containerEl, options = {}) {
 
     if (submitBtn) {
       submitBtn.addEventListener('click', async () => {
+        if (isSaving || isDestroyed) return;
+        isSaving = true;
         errorEl.style.display = 'none';
 
         // Calculate effective roles directly from explicitly selected canonical roles + custom roles
@@ -871,12 +884,14 @@ export async function renderOnboardingView(containerEl, options = {}) {
         if (effectiveRoles.size === 0 && selectedCanonicalRoles.size === 0) {
           errorEl.textContent = 'Please select or add at least one job role.';
           errorEl.style.display = 'block';
+          isSaving = false;
           return;
         }
 
         if (selectedLocations.size === 0) {
           errorEl.textContent = 'Please select or add at least one preferred location.';
           errorEl.style.display = 'block';
+          isSaving = false;
           return;
         }
 
@@ -902,6 +917,8 @@ export async function renderOnboardingView(containerEl, options = {}) {
           // Save preferences to backend API
           const saved = await apiClient.savePreferences(payload);
 
+          if (isDestroyed) return;
+
           // Save local mirror
           localStorage.setItem('roleradar_preferences', JSON.stringify(saved));
           localStorage.setItem('roleradar_onboarding_completed', 'true');
@@ -912,16 +929,33 @@ export async function renderOnboardingView(containerEl, options = {}) {
             window.location.hash = '#/dashboard';
           }
         } catch (err) {
+          if (isDestroyed) return;
           errorEl.textContent = err.message || 'Failed to save preferences. Please try again.';
           errorEl.style.display = 'block';
           submitBtn.disabled = false;
           submitBtn.textContent = isEditing ? 'Save Preferences' : 'Start Finding Jobs →';
+        } finally {
+          if (!isDestroyed) {
+            isSaving = false;
+          }
         }
       });
     }
   }
 
   updateView();
+
+  return {
+    destroy: () => {
+      isDestroyed = true;
+      isSaving = false;
+      if (handleDocClick) document.removeEventListener('click', handleDocClick);
+      if (handleDocKeydown) document.removeEventListener('keydown', handleDocKeydown);
+      if (containerEl) {
+        delete containerEl.dataset.roleDropdownEventsBound;
+      }
+    },
+  };
 }
 
 /**

@@ -16,7 +16,7 @@ import {
 } from '../auth/email-verification-service.js';
 import { getDb } from '../database/connection.js';
 import { schema } from '../database/index.js';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { config } from '../config/env.js';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -29,8 +29,8 @@ export async function registerHandler(req: Request, res: Response): Promise<void
     return;
   }
 
-  if (!password || typeof password !== 'string' || password.length < 6) {
-    res.status(400).json({ error: 'Password must be at least 6 characters long.' });
+  if (!password || typeof password !== 'string' || password.length < 8) {
+    res.status(400).json({ error: 'Password must be at least 8 characters long.' });
     return;
   }
 
@@ -66,6 +66,7 @@ export async function registerHandler(req: Request, res: Response): Promise<void
         name: schema.users.name,
         emailVerified: schema.users.email_verified,
         emailVerifiedAt: schema.users.email_verified_at,
+        tokenVersion: schema.users.token_version,
         createdAt: schema.users.created_at,
       });
 
@@ -76,6 +77,7 @@ export async function registerHandler(req: Request, res: Response): Promise<void
       userId: inserted!.id,
       email: inserted!.email,
       name: inserted!.name,
+      tokenVersion: inserted!.tokenVersion,
     });
 
     res.status(201).json({
@@ -111,6 +113,7 @@ export async function loginHandler(req: Request, res: Response): Promise<void> {
         createdAt: schema.users.created_at,
         isAdmin: schema.users.is_admin,
         is_beta_user: schema.users.is_beta_user,
+        tokenVersion: schema.users.token_version,
       })
       .from(schema.users)
       .where(eq(schema.users.email, normalizedEmail))
@@ -131,6 +134,7 @@ export async function loginHandler(req: Request, res: Response): Promise<void> {
       userId: user.id,
       email: user.email,
       name: user.name,
+      tokenVersion: user.tokenVersion,
     });
 
     res.json({
@@ -267,3 +271,37 @@ export async function resendVerificationHandler(
     res.status(500).json({ error: 'Failed to process verification resend request.' });
   }
 }
+
+/**
+ * POST /api/auth/revoke-sessions
+ * Invalidates all active tokens for the authenticated user by incrementing token_version.
+ */
+export async function revokeTokensHandler(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthorized.' });
+    return;
+  }
+
+  try {
+    const db = getDb();
+    const [updated] = await db
+      .update(schema.users)
+      .set({
+        token_version: sql`${schema.users.token_version} + 1`,
+        updated_at: new Date(),
+      })
+      .where(eq(schema.users.id, req.user.id))
+      .returning({ tokenVersion: schema.users.token_version });
+
+    res.json({
+      message: 'All active sessions have been revoked.',
+      tokenVersion: updated?.tokenVersion ?? 1,
+    });
+  } catch {
+    res.status(500).json({ error: 'Failed to revoke sessions.' });
+  }
+}
+

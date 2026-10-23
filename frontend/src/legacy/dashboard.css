@@ -36,6 +36,18 @@
     display: flex;
     align-items: center;
     gap: var(--kn-space-2);
+    padding: var(--kn-space-2) var(--kn-space-3);
+    border-bottom: 1px solid rgba(17, 17, 17, 0.08);
+    margin-bottom: var(--kn-space-2);
+}
+
+.app-sidebar__section-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(17, 17, 17, 0.4);
+    font-weight: 600;
+    padding: var(--kn-space-3) var(--kn-space-3) var(--kn-space-1) var(--kn-space-3);
 }
 
 .app-sidebar__nav {
@@ -48,6 +60,7 @@
 .app-sidebar__link {
     display: flex;
     align-items: center;
+    gap: var(--kn-space-3);
     padding: var(--kn-space-2) var(--kn-space-3);
     color: rgba(17, 17, 17, 0.6);
     text-decoration: none;
@@ -64,6 +77,26 @@
 .app-sidebar__link--active {
     background-color: rgba(139, 0, 0, 0.1);
     color: var(--kn-color-accent);
+    font-weight: 600;
+}
+
+.app-sidebar__icon {
+    width: 20px;
+    height: 20px;
+    color: inherit;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.app-sidebar__logout-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    font-family: var(--kn-body-font);
 }
 
 .app-sidebar__footer {

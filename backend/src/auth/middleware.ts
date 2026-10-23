@@ -23,6 +23,7 @@ export interface AuthenticatedUser {
   emailVerified: boolean;
   isAdmin: boolean;
   is_beta_user: boolean;
+  tokenVersion: number;
 }
 
 export interface AuthenticatedRequest extends Request {
@@ -64,6 +65,7 @@ export async function requireAuth(
         emailVerified: schema.users.email_verified,
         isAdmin: schema.users.is_admin,
         is_beta_user: schema.users.is_beta_user,
+        tokenVersion: schema.users.token_version,
       })
       .from(schema.users)
       .where(eq(schema.users.id, payload.userId))
@@ -71,6 +73,14 @@ export async function requireAuth(
 
     if (!user) {
       res.status(401).json({ error: 'User account no longer exists.' });
+      return;
+    }
+
+    // Server-side token version verification / session revocation check.
+    // Legacy tokens default to version 1. If user's version was incremented, token is revoked.
+    const tokenVer = payload.tokenVersion ?? 1;
+    if (user.tokenVersion !== undefined && tokenVer !== user.tokenVersion) {
+      res.status(401).json({ error: 'Authentication token has been revoked.' });
       return;
     }
 
@@ -115,14 +125,18 @@ export async function optionalAuth(
         emailVerified: schema.users.email_verified,
         isAdmin: schema.users.is_admin,
         is_beta_user: schema.users.is_beta_user,
+        tokenVersion: schema.users.token_version,
       })
       .from(schema.users)
       .where(eq(schema.users.id, payload.userId))
       .limit(1);
 
     if (user) {
-      req.user = user;
-      req.tokenPayload = payload;
+      const tokenVer = payload.tokenVersion ?? 1;
+      if (tokenVer === user.tokenVersion) {
+        req.user = user;
+        req.tokenPayload = payload;
+      }
     }
     next();
   } catch {

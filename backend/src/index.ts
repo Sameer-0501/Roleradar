@@ -31,11 +31,43 @@ import { verificationRetentionWorker } from './jobs/verification-retention-worke
 import { seedSources } from './pipeline/source-seeder.js';
 import { SOURCE_CATALOG } from './sources/catalog.js';
 import { createCollectorForSource } from './sources/source-factory.js';
+import helmet from 'helmet';
 
 const log = createLogger('server');
 
 async function bootstrap() {
   const app = express();
+
+  // ─── Reverse Proxy & Security Headers ────────────────────────────────────
+  app.set('trust proxy', config.trustProxy);
+  app.disable('x-powered-by');
+
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+          fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+          imgSrc: ["'self'", 'data:', 'https:'],
+          connectSrc: ["'self'", ...config.corsOrigins],
+          frameAncestors: ["'none'"],
+          objectSrc: ["'none'"],
+          upgradeInsecureRequests: config.nodeEnv === 'production' ? [] : null,
+        },
+      },
+      crossOriginEmbedderPolicy: false,
+      hsts:
+        config.nodeEnv === 'production'
+          ? {
+              maxAge: 31536000,
+              includeSubDomains: true,
+              preload: true,
+            }
+          : false,
+    })
+  );
 
   // ─── Middleware ──────────────────────────────────────────────────────────
   app.use(

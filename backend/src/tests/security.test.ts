@@ -215,6 +215,7 @@ describe('Rate limiter configurations', () => {
         method: 'GET',
         path: '/test',
         socket: { remoteAddress: '127.0.0.1' },
+        app: { get: () => false },
       } as any;
       return { req, res, next, statuses };
     }

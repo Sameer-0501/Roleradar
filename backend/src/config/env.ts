@@ -57,6 +57,12 @@ export interface AppConfig {
    * In production must be set via CORS_ORIGIN env var.
    */
   corsOrigins: string[];
+  /**
+   * Express trust proxy configuration.
+   * Can be boolean, number of hops (e.g. 1 behind Nginx/ALB), or specific IP/subnet.
+   * Defaults to 1 in production, false in development/test.
+   */
+  trustProxy: boolean | number | string;
   /** Default job scan interval (minutes) */
   jobScanIntervalMinutes: number;
   /** Greenhouse source scan interval (minutes) */
@@ -109,6 +115,18 @@ export interface AppConfig {
   lifecycleWorkerIntervalMinutes: number;
 }
 
+function parseTrustProxy(raw: string | undefined, nodeEnv: string): boolean | number | string {
+  if (!raw || raw.trim() === '') {
+    return nodeEnv === 'production' ? 1 : false;
+  }
+  const trimmed = raw.trim();
+  if (trimmed === 'true') return true;
+  if (trimmed === 'false') return false;
+  const num = parseInt(trimmed, 10);
+  if (!isNaN(num)) return num;
+  return trimmed;
+}
+
 function loadConfig(): AppConfig {
   const rawEnv = optionalEnv('NODE_ENV', 'development');
   const nodeEnv = (['development', 'production', 'test'] as const).includes(
@@ -141,6 +159,9 @@ function loadConfig(): AppConfig {
       : nodeEnv === 'production'
       ? [] // In production with no CORS_ORIGIN set, deny all — logs a startup warning
       : ['http://localhost:5173', 'http://127.0.0.1:5173'];
+
+  // TRUST_PROXY: reverse proxy trust configuration (1 for single reverse proxy, or specific string/boolean)
+  const trustProxy = parseTrustProxy(process.env['TRUST_PROXY'], nodeEnv);
 
   const jobScanIntervalMinutes = optionalIntEnv('JOB_SCAN_INTERVAL_MINUTES', 30);
   const greenhouseScanIntervalMinutes = optionalIntEnv(
@@ -217,6 +238,7 @@ function loadConfig(): AppConfig {
     apiPort,
     nodeEnv,
     corsOrigins,
+    trustProxy,
     jobScanIntervalMinutes,
     greenhouseScanIntervalMinutes,
     leverScanIntervalMinutes,

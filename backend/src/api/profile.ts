@@ -131,7 +131,22 @@ export async function uploadResumeHandler(req: Request, res: Response): Promise<
 
     res.status(201).json(result);
   } catch (err: any) {
-    res.status(500).json({ error: 'Failed to upload and parse resume', details: err.message });
+    const msg = err?.message || '';
+    const isValidationError =
+      msg.includes('Unsupported file format') ||
+      msg.includes('File size exceeds') ||
+      msg.includes('Invalid file signature') ||
+      msg.includes('Inconsistent MIME') ||
+      msg.includes('File is empty') ||
+      msg.includes('binary characters detected') ||
+      msg.includes('binary executable signature') ||
+      msg.includes('HTML tags detected') ||
+      msg.includes('null bytes detected');
+
+    res.status(isValidationError ? 400 : 500).json({
+      error: isValidationError ? msg : 'Failed to upload and parse resume',
+      details: msg,
+    });
   }
 }
 

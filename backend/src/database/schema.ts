@@ -242,6 +242,11 @@ export const users = pgTable(
     last_verification_sent_at: timestamp('last_verification_sent_at', {
       withTimezone: true,
     }),
+    /**
+     * Server-side token version counter for session revocation.
+     * Incremented on logout, password changes, or manual revocation.
+     */
+    token_version: integer('token_version').notNull().default(1),
     created_at: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

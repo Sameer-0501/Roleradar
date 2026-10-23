@@ -27,6 +27,7 @@ import {
   meHandler,
   verifyEmailHandler,
   resendVerificationHandler,
+  revokeTokensHandler,
 } from './auth.js';
 import {
   getPreferencesHandler,
@@ -123,6 +124,10 @@ export function createRouter(): Router {
 
   router.get('/auth/me', requireAuth, (req, res) => {
     void meHandler(req, res);
+  });
+
+  router.post('/auth/revoke-sessions', requireAuth, (req, res) => {
+    void revokeTokensHandler(req, res);
   });
 
   router.get('/auth/verify-email', (req, res) => {

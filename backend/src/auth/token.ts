@@ -11,6 +11,7 @@ export interface TokenPayload {
   userId: string;
   email: string;
   name?: string | null;
+  tokenVersion?: number;
   iat?: number;
   exp?: number;
 }
