@@ -25,7 +25,7 @@ vi.mock('../notifications/alert-service.js', () => ({
 
 import { getDb, closeConnection } from '../database/connection.js';
 import { schema } from '../database/index.js';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, inArray } from 'drizzle-orm';
 import { WorkdayCollector } from '../collectors/ats/workday-collector.js';
 import { runPipeline } from '../pipeline/pipeline.js';
 import { seedSources } from '../pipeline/source-seeder.js';
@@ -100,6 +100,8 @@ afterAll(async () => {
     const db = getDb();
     for (const id of insertedJobIds) {
       try {
+        await db.delete(schema.jobVerifications).where(eq(schema.jobVerifications.job_id, id));
+        await db.delete(schema.userJobInteractions).where(eq(schema.userJobInteractions.job_id, id));
         await db.delete(schema.jobs).where(eq(schema.jobs.id, id));
       } catch {
         // Ignore cleanup errors
@@ -143,12 +145,23 @@ describe('Workday Integration — Bank of America', () => {
   it('persists a controlled bounded subset through the full pipeline and verifies them safely', async () => {
     expect(sharedCandidates.length).toBeGreaterThan(0);
 
+    const db = getDb();
+    // Pre-snapshot existing job IDs for this company so teardown NEVER deletes pre-existing data
+    const preExistingJobs = await db
+      .select({ id: schema.jobs.id })
+      .from(schema.jobs)
+      .where(eq(schema.jobs.company_id, companyId));
+    const preExistingJobIds = new Set(preExistingJobs.map(j => j.id));
+
     const stats = await runPipeline(sharedCandidates, companyId, SOURCE_CONFIG);
 
     console.log(`Run pipeline 1: ${stats.total} total, ${stats.skipped} skipped, ${stats.failed} failed.`);
 
-    const db = getDb();
-    const inserted = await db
+    const candidateExternalIds = sharedCandidates
+      .map(c => c.externalJobId)
+      .filter((id): id is string => Boolean(id));
+
+    const matchingJobs = await db
       .select({
         id: schema.jobs.id,
         status: schema.jobs.status,
@@ -158,19 +171,21 @@ describe('Workday Integration — Bank of America', () => {
       .where(
         and(
           eq(schema.jobs.company_id, companyId),
-          eq(schema.jobs.source_system, 'WORKDAY')
+          inArray(schema.jobs.external_job_id, candidateExternalIds)
         )
       );
 
-    for (const job of inserted) {
-      if (!insertedJobIds.includes(job.id)) {
+    // CRITICAL: Only mark for test teardown if it was newly created in this run,
+    // preserving any pre-existing records that already existed prior to this test.
+    for (const job of matchingJobs) {
+      if (!preExistingJobIds.has(job.id) && !insertedJobIds.includes(job.id)) {
         insertedJobIds.push(job.id);
       }
     }
 
-    const verifiedCount = inserted.filter(j => j.verification_status === 'VERIFIED').length;
-    const closedCount = inserted.filter(j => j.verification_status === 'CLOSED').length;
-    const pendingCount = inserted.filter(j => j.verification_status === 'PENDING').length;
+    const verifiedCount = matchingJobs.filter(j => j.verification_status === 'VERIFIED').length;
+    const closedCount = matchingJobs.filter(j => j.verification_status === 'CLOSED').length;
+    const pendingCount = matchingJobs.filter(j => j.verification_status === 'PENDING').length;
     
     console.log(`Verification: VERIFIED=${verifiedCount}, CLOSED=${closedCount}, PENDING=${pendingCount}`);
     
@@ -181,18 +196,22 @@ describe('Workday Integration — Bank of America', () => {
     console.log(`Run pipeline 2 (duplicate check): ${stats2.total} total, ${stats2.skipped} skipped, ${stats2.failed} failed.`);
     
     const db = getDb();
+    const candidateExternalIds = sharedCandidates
+      .map(c => c.externalJobId)
+      .filter((id): id is string => Boolean(id));
+
     const records = await db
       .select({ id: schema.jobs.id })
       .from(schema.jobs)
       .where(
         and(
           eq(schema.jobs.company_id, companyId),
-          eq(schema.jobs.source_system, 'WORKDAY')
+          inArray(schema.jobs.external_job_id, candidateExternalIds)
         )
       );
 
-    // It should not insert new records, the count should match insertedJobIds length
-    expect(records.length).toBe(insertedJobIds.length);
+    // It should not insert duplicates: matching records count matches unique candidates count
+    expect(records.length).toBe(candidateExternalIds.length);
   }, 90_000);
   
   it('enforces strict source isolation (no unrelated employers modified)', async () => {

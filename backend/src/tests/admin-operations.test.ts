@@ -83,22 +83,9 @@ describe('Admin Operations (Phase 16.4A)', () => {
     
     const db = getDb();
     
-    // Clean up notifications and jobs and companies created in tests
+    // Clean up notifications created in tests
     await db.delete(schema.notifications).where(eq(schema.notifications.user_id, adminUserId));
     
-    // First find the test company to delete its jobs
-    const gitlabCompany = await db.select({ id: schema.companies.id }).from(schema.companies).where(eq(schema.companies.name, 'GitLab')).limit(1);
-    if (gitlabCompany.length > 0) {
-      const companyId = gitlabCompany[0]!.id;
-      const createdJobs = await db.select({ id: schema.jobs.id }).from(schema.jobs).where(eq(schema.jobs.company_id, companyId));
-      const jobIds = createdJobs.map(j => j.id);
-      if (jobIds.length > 0) {
-        await db.delete(schema.userJobInteractions).where(inArray(schema.userJobInteractions.job_id, jobIds));
-        await db.delete(schema.jobVerifications).where(inArray(schema.jobVerifications.job_id, jobIds));
-        await db.delete(schema.jobs).where(inArray(schema.jobs.id, jobIds));
-      }
-      await db.delete(schema.companies).where(eq(schema.companies.id, companyId));
-    }
     // Reset rate limiter so it doesn't affect subsequent tests
     perSourceScanTriggerLimiter.resetKey('127.0.0.1');
     perSourceScanTriggerLimiter.resetKey('10.0.0.10');
@@ -213,25 +200,42 @@ describe('Admin Operations (Phase 16.4A)', () => {
 
   describe('Re-verification', () => {
     let jobId: string;
+    let reverifyCompanyId: string = '';
     
     beforeEach(async () => {
       const db = getDb();
+      const uniqueSuffix = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
       const [company] = await db.insert(schema.companies).values({
-        name: 'GitLab',
-        official_domain: 'gitlab.com',
-        careers_url: 'gitlab.com/careers',
+        name: `Test_Reverify_Company_${uniqueSuffix}`,
+        official_domain: `reverify-${uniqueSuffix}.test`,
+        careers_url: `https://reverify-${uniqueSuffix}.test/careers`,
         ats_type: 'GREENHOUSE'
       }).returning();
+      reverifyCompanyId = company!.id;
 
       const [job] = await db.insert(schema.jobs).values({
         company_id: company!.id,
         source_system: 'GREENHOUSE',
-        external_job_id: '123',
+        external_job_id: `ext_${uniqueSuffix}`,
         title: 'Engineer',
-        official_url: 'url',
-        content_hash: 'hash'
+        official_url: `https://reverify-${uniqueSuffix}.test/jobs/1`,
+        content_hash: `hash_${uniqueSuffix}`
       }).returning();
       jobId = job!.id;
+    });
+
+    afterEach(async () => {
+      const db = getDb();
+      if (jobId) {
+        await db.delete(schema.userJobInteractions).where(eq(schema.userJobInteractions.job_id, jobId));
+        await db.delete(schema.jobVerifications).where(eq(schema.jobVerifications.job_id, jobId));
+        await db.delete(schema.jobs).where(eq(schema.jobs.id, jobId));
+        jobId = '';
+      }
+      if (reverifyCompanyId) {
+        await db.delete(schema.companies).where(eq(schema.companies.id, reverifyCompanyId));
+        reverifyCompanyId = '';
+      }
     });
 
     it('14. unknown job -> 404', async () => {
