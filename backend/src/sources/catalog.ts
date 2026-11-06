@@ -1828,6 +1828,19 @@ export const SOURCE_CATALOG: SourceDefinition[] = [
       },
     },
   },
+  {
+    companyName: 'Omnissa',
+    officialDomain: 'omnissa.wd501.myworkdayjobs.com',
+    careersUrl: 'https://omnissa.wd501.myworkdayjobs.com/Omnissa_External_Career_Site',
+    atsType: 'WORKDAY',
+    isActive: true,
+    scanIntervalMinutes: 30,
+    config: {
+      host: 'omnissa.wd501.myworkdayjobs.com',
+      tenant: 'omnissa',
+      clientSite: 'Omnissa_External_Career_Site',
+    },
+  },
 ];
 
 

@@ -3,7 +3,7 @@
  *
  * Tests the candidate direct employers:
  *   1. Fractal Analytics - fractal.wd1.myworkdayjobs.com (INTEGRATED)
- *   2. Omnissa - omnissa.wd501.myworkdayjobs.com (DEFERRED / BLOCKED)
+ *   2. Omnissa - omnissa.wd501.myworkdayjobs.com (ADMITTED / INTEGRATED)
  *   3. Piramal Pharma - piramalpharma.wd102.myworkdayjobs.com (INTEGRATED)
  *   4. Elevance Health / Carelon - elevancehealth.wd1.myworkdayjobs.com (INTEGRATED)
  *   5. Thomson Reuters - thomsonreuters.wd5.myworkdayjobs.com (INTEGRATED)
@@ -134,16 +134,19 @@ describe('Phase 20.5 Batch 2 Workday Expansion: Fractal, Omnissa, Piramal, Eleva
     await closeConnection();
   });
 
-  // ─── Omnissa Safe Deferral Verification ─────────────────────────────────────
-  describe('Candidate 2: Omnissa (Safe Deferral)', () => {
-    it('confirms Omnissa is NOT registered in SOURCE_CATALOG', () => {
+  // ─── Omnissa Admission & Runtime Revalidation ──────────────────────────────
+  describe('Candidate 2: Omnissa (Revalidated & Admitted)', () => {
+    it('confirms Omnissa is registered in SOURCE_CATALOG following runtime recovery', () => {
       const omnissaSource = SOURCE_CATALOG.find(
         (s) => s.companyName.toLowerCase().includes('omnissa')
       );
-      expect(omnissaSource).toBeUndefined();
+      expect(omnissaSource).toBeDefined();
+      expect(omnissaSource!.atsType).toBe('WORKDAY');
+      expect(omnissaSource!.isActive).toBe(true);
+      expect(omnissaSource!.officialDomain).toBe('omnissa.wd501.myworkdayjobs.com');
     });
 
-    it('documents empirical evidence: Workday host returns non-JSON maintenance redirect', async () => {
+    it('documents empirical evidence: Workday CXS endpoint returned HTTP 200 with valid JSON', async () => {
       const endpoint = 'https://omnissa.wd501.myworkdayjobs.com/wday/cxs/omnissa/Omnissa_External_Career_Site/jobs';
       const res = await fetch(endpoint, {
         method: 'POST',
@@ -151,10 +154,36 @@ describe('Phase 20.5 Batch 2 Workday Expansion: Fractal, Omnissa, Piramal, Eleva
         body: JSON.stringify({ limit: 5, offset: 0, appliedFacets: {}, searchText: '' }),
       });
 
-      // Host either returns maintenance redirect HTML or recovered JSON endpoint
-      const text = await res.text();
-      const isHtmlOrOk = text.trim().startsWith('<!DOCTYPE html>') || text.includes('maintenance-page') || text.includes('community.workday.com') || res.status === 200;
-      expect(isHtmlOrOk).toBe(true);
+      expect(res.status).toBe(200);
+      const json = (await res.json()) as any;
+      expect(json).toBeDefined();
+      expect(typeof json.total).toBe('number');
+      expect(json.total).toBeGreaterThan(0);
+      expect(Array.isArray(json.jobPostings)).toBe(true);
+      expect(json.jobPostings.length).toBeGreaterThan(0);
+    });
+
+    it('preserves historical regression coverage: handles HTTP 303 maintenance redirect with zero false admissions', async () => {
+      // Historical regression fixture: simulates previously observed 303 maintenance response
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 303,
+        text: async () => '<!DOCTYPE html><html><body>Scheduled Maintenance</body></html>',
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      const collector = new WorkdayCollector({
+        companyName: 'Omnissa',
+        host: 'omnissa.wd501.myworkdayjobs.com',
+        tenant: 'omnissa',
+        clientSite: 'Omnissa_External_Career_Site',
+      });
+
+      const candidates = await collector.discoverJobs();
+      expect(candidates).toEqual([]);
+      expect(collector.isCompleteScan()).toBe(false);
+
+      vi.unstubAllGlobals();
     });
   });
 

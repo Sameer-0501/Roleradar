@@ -496,4 +496,320 @@ describe('WorkdayCollector', () => {
     expect(health.healthy).toBe(false);
     expect(health.message).toMatch(/unreachable/i);
   });
+
+  // ── Pagination & Scan Completeness Invariants (P0) ─────────────────────────
+
+  describe('Pagination & Scan Completeness Invariants (P0)', () => {
+    it('marks scan as INCOMPLETE when maxPages truncates results before exhausting total', async () => {
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            total: 119,
+            jobPostings: [SAMPLE_POSTING_1],
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            total: 119,
+            jobPostings: [SAMPLE_POSTING_2],
+          }),
+        });
+
+      vi.stubGlobal('fetch', fetchMock);
+
+      const collector = createCollector({ maxPages: 2, pageSize: 1 });
+      const candidates = await collector.discoverJobs();
+
+      expect(candidates).toHaveLength(2);
+      expect(collector.isCompleteScan()).toBe(false);
+      const details = collector.getScanCompletenessDetails();
+      expect(details.isComplete).toBe(false);
+      expect(details.reason).toBe('TRUNCATED_BY_MAX_PAGES');
+    });
+
+    it('marks scan as COMPLETE when all pages are fetched and cumulative postings account for total', async () => {
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            total: 2,
+            jobPostings: [SAMPLE_POSTING_1],
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            total: 2,
+            jobPostings: [SAMPLE_POSTING_2],
+          }),
+        });
+
+      vi.stubGlobal('fetch', fetchMock);
+
+      const collector = createCollector({ maxPages: 5, pageSize: 1 });
+      const candidates = await collector.discoverJobs();
+
+      expect(candidates).toHaveLength(2);
+      expect(collector.isCompleteScan()).toBe(true);
+      expect(collector.getScanCompletenessDetails().reason).toBe('FULL_ENUMERATION');
+    });
+
+    it('marks scan as COMPLETE when natural end is reached (postings.length < pageSize)', async () => {
+      const fetchMock = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          total: 1,
+          jobPostings: [SAMPLE_POSTING_1], // 1 posting returned for pageSize = 20
+        }),
+      });
+
+      vi.stubGlobal('fetch', fetchMock);
+
+      const collector = createCollector({ maxPages: 5, pageSize: 20 });
+      const candidates = await collector.discoverJobs();
+
+      expect(candidates).toHaveLength(1);
+      expect(collector.isCompleteScan()).toBe(true);
+      expect(collector.getScanCompletenessDetails().reason).toBe('FULL_ENUMERATION');
+    });
+
+    it('marks scan as INCOMPLETE when a later page encounters an HTTP error', async () => {
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            total: 50,
+            jobPostings: [SAMPLE_POSTING_1],
+          }),
+        })
+        .mockResolvedValue({
+          ok: false,
+          status: 500,
+        });
+
+      vi.stubGlobal('fetch', fetchMock);
+
+      const collector = createCollector({ maxPages: 5, pageSize: 1 });
+      const candidates = await collector.discoverJobs();
+
+      expect(candidates).toHaveLength(1);
+      expect(collector.isCompleteScan()).toBe(false);
+      expect(collector.getScanCompletenessDetails().reason).toBe('HTTP_ERROR_500');
+    });
+
+    it('adapts when upstream total changes dynamically during pagination', async () => {
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            total: 2, // initially reports 2
+            jobPostings: [SAMPLE_POSTING_1],
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            total: 3, // upstream increased to 3
+            jobPostings: [SAMPLE_POSTING_2],
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            total: 3,
+            jobPostings: [SAMPLE_POSTING_FALLBACK_ID],
+          }),
+        });
+
+      vi.stubGlobal('fetch', fetchMock);
+
+      const collector = createCollector({ maxPages: 5, pageSize: 1 });
+      const candidates = await collector.discoverJobs();
+
+      expect(candidates).toHaveLength(3);
+      expect(collector.isCompleteScan()).toBe(true);
+      expect(collector.getScanCompletenessDetails().reason).toBe('FULL_ENUMERATION');
+    });
+
+    it('marks scan as INCOMPLETE when appliedFacets are configured regardless of results', async () => {
+      const facetedCollector = new WorkdayCollector({
+        companyName: 'Thomson Reuters',
+        host: 'thomsonreuters.wd5.myworkdayjobs.com',
+        tenant: 'thomsonreuters',
+        clientSite: 'external_career_site',
+        appliedFacets: {
+          Location_Country: ['c4f78be1a8f14da0ab49ce1162348a5e'],
+        },
+        pageSize: 20,
+        maxPages: 5,
+      });
+
+      expect(facetedCollector.isCompleteScan()).toBe(false);
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            total: 1,
+            jobPostings: [SAMPLE_POSTING_1],
+          }),
+        })
+      );
+
+      const candidates = await facetedCollector.discoverJobs();
+      expect(candidates).toHaveLength(1);
+      expect(facetedCollector.isCompleteScan()).toBe(false);
+      expect(facetedCollector.getScanCompletenessDetails().reason).toBe('CONFIGURED_FACETS');
+    });
+
+    it('exact 119 postings with pageSize=20 and maxPages=5 retrieves 100 and marks INCOMPLETE', async () => {
+      const generatePage = (pageIdx: number, count: number) => ({
+        total: 119,
+        jobPostings: Array.from({ length: count }, (_, i) => ({
+          title: `Engineer ${pageIdx * 20 + i}`,
+          externalPath: `/job/loc/Title_R-${pageIdx * 20 + i + 1000}`,
+          bulletFields: [`R-${pageIdx * 20 + i + 1000}`],
+        })),
+      });
+
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => generatePage(0, 20) })
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => generatePage(1, 20) })
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => generatePage(2, 20) })
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => generatePage(3, 20) })
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => generatePage(4, 20) });
+
+      vi.stubGlobal('fetch', fetchMock);
+
+      const collector = createCollector({ maxPages: 5, pageSize: 20 });
+      const candidates = await collector.discoverJobs();
+
+      expect(candidates).toHaveLength(100);
+      expect(collector.isCompleteScan()).toBe(false);
+      expect(collector.getScanCompletenessDetails().reason).toBe('TRUNCATED_BY_MAX_PAGES');
+    });
+
+    it('exact 119 postings with pageSize=20 and maxPages=6 retrieves 119 with short final page and marks COMPLETE', async () => {
+      const generatePage = (pageIdx: number, count: number) => ({
+        total: 119,
+        jobPostings: Array.from({ length: count }, (_, i) => ({
+          title: `Engineer ${pageIdx * 20 + i}`,
+          externalPath: `/job/loc/Title_R-${pageIdx * 20 + i + 1000}`,
+          bulletFields: [`R-${pageIdx * 20 + i + 1000}`],
+        })),
+      });
+
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => generatePage(0, 20) })
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => generatePage(1, 20) })
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => generatePage(2, 20) })
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => generatePage(3, 20) })
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => generatePage(4, 20) })
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => generatePage(5, 19) }); // short final page: 19 < 20
+
+      vi.stubGlobal('fetch', fetchMock);
+
+      const collector = createCollector({ maxPages: 6, pageSize: 20 });
+      const candidates = await collector.discoverJobs();
+
+      expect(candidates).toHaveLength(119);
+      expect(collector.isCompleteScan()).toBe(true);
+      expect(collector.getScanCompletenessDetails().reason).toBe('FULL_ENUMERATION');
+    });
+
+    it('zero-result response marks scan as COMPLETE with 0 candidates', async () => {
+      const fetchMock = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          total: 0,
+          jobPostings: [],
+        }),
+      });
+
+      vi.stubGlobal('fetch', fetchMock);
+
+      const collector = createCollector({ maxPages: 5, pageSize: 20 });
+      const candidates = await collector.discoverJobs();
+
+      expect(candidates).toHaveLength(0);
+      expect(collector.isCompleteScan()).toBe(true);
+      expect(collector.getScanCompletenessDetails().reason).toBe('FULL_ENUMERATION');
+    });
+
+    it('marks scan as INCOMPLETE when later page returns malformed response', async () => {
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            total: 10,
+            jobPostings: [SAMPLE_POSTING_1],
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ notAWorkdayResponse: true }),
+        });
+
+      vi.stubGlobal('fetch', fetchMock);
+
+      const collector = createCollector({ maxPages: 5, pageSize: 1 });
+      const candidates = await collector.discoverJobs();
+
+      expect(candidates).toHaveLength(1);
+      expect(collector.isCompleteScan()).toBe(false);
+      expect(collector.getScanCompletenessDetails().reason).toBe('MALFORMED_RESPONSE');
+    });
+
+    it('collector reuse across consecutive scans resets state cleanly without leakage', async () => {
+      const collector = createCollector({ maxPages: 2, pageSize: 1 });
+
+      // Run 1: Truncated scan (total 5, maxPages 2, pageSize 1 -> 2 fetched)
+      vi.stubGlobal(
+        'fetch',
+        vi.fn()
+          .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ total: 5, jobPostings: [SAMPLE_POSTING_1] }) })
+          .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ total: 5, jobPostings: [SAMPLE_POSTING_2] }) })
+      );
+      const res1 = await collector.discoverJobs();
+      expect(res1).toHaveLength(2);
+      expect(collector.isCompleteScan()).toBe(false);
+      expect(collector.getScanCompletenessDetails().reason).toBe('TRUNCATED_BY_MAX_PAGES');
+
+      // Run 2: Reusing SAME collector instance with full enumeration (total 1, 1 fetched)
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ total: 1, jobPostings: [SAMPLE_POSTING_1] }) })
+      );
+      const res2 = await collector.discoverJobs();
+      expect(res2).toHaveLength(1);
+      expect(collector.isCompleteScan()).toBe(true);
+      expect(collector.getScanCompletenessDetails().reason).toBe('FULL_ENUMERATION');
+
+      // Run 3: Reusing SAME collector instance when HTTP 500 occurs
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({ ok: false, status: 500 })
+      );
+      const res3 = await collector.discoverJobs();
+      expect(res3).toHaveLength(0);
+      expect(collector.isCompleteScan()).toBe(false);
+      expect(collector.getScanCompletenessDetails().reason).toBe('HTTP_ERROR_500');
+    });
+  });
 });

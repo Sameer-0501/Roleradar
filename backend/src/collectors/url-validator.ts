@@ -46,6 +46,22 @@ export function validateJobUrl(url: string, officialDomain: string): UrlValidati
     };
   }
 
+  // Rule 2a: Disallow embedded credentials (user-info URL tricks like https://omnissa@evil.com)
+  if (parsed.username || parsed.password) {
+    return {
+      valid: false,
+      reason: `URL must not contain embedded userinfo credentials: "${url}"`,
+    };
+  }
+
+  // Rule 2b: Disallow non-standard ports (must use standard HTTPS port 443)
+  if (parsed.port && parsed.port !== '443') {
+    return {
+      valid: false,
+      reason: `URL specifies unexpected non-standard port "${parsed.port}": "${url}"`,
+    };
+  }
+
   // Rule 3: Hostname must match the official domain (exact or subdomain)
   const hostname = parsed.hostname.toLowerCase();
   const domain = officialDomain.toLowerCase();

@@ -176,6 +176,8 @@ function extractJobReqId(posting: WorkdayPostingSummary): string | undefined {
 
 export class WorkdayCollector extends BaseCollector {
   private readonly config: Required<WorkdaySourceConfig>;
+  private lastScanComplete: boolean = false;
+  private lastScanCompletenessReason: string = 'NO_SCAN_PERFORMED';
 
   constructor(config: WorkdaySourceConfig) {
     super();
@@ -191,15 +193,41 @@ export class WorkdayCollector extends BaseCollector {
       appliedFacets: config.appliedFacets ?? {},
       sourceUrl: config.sourceUrl ?? '',
     };
+    this.lastScanComplete = !this.hasFacets();
+    this.lastScanCompletenessReason = this.hasFacets() ? 'CONFIGURED_FACETS' : 'INITIAL_STATE';
+  }
+
+  private hasFacets(): boolean {
+    return Boolean(this.config.appliedFacets && Object.keys(this.config.appliedFacets).length > 0);
   }
 
   /**
    * Returns whether this scan represents an authoritative, 100% complete global scan.
    * If specific facets (e.g. locationCountry) are applied, this is a scoped/partial scan,
    * meaning absent jobs must NOT be closed based on absence from this scan.
+   *
+   * Following a scan (discoverJobs), this returns true ONLY when:
+   * 1. No facets were applied (it is a global scan).
+   * 2. No network errors or HTTP errors aborted the scan.
+   * 3. The scan fully enumerated all postings (either reached end of listings where postings.length < pageSize,
+   *    or cumulative raw postings fetched accounted for total reported jobs).
+   * 4. It was NOT truncated by reaching maxPages before exhausting all results.
    */
   isCompleteScan(): boolean {
-    return !this.config.appliedFacets || Object.keys(this.config.appliedFacets).length === 0;
+    if (this.hasFacets()) {
+      return false;
+    }
+    return this.lastScanComplete;
+  }
+
+  /**
+   * Return detailed diagnostic reason for the last scan's completeness decision.
+   */
+  getScanCompletenessDetails(): { isComplete: boolean; reason: string } {
+    return {
+      isComplete: this.isCompleteScan(),
+      reason: this.lastScanCompletenessReason,
+    };
   }
 
   getSourceName(): string {
@@ -287,6 +315,20 @@ export class WorkdayCollector extends BaseCollector {
     const candidates: JobCandidate[] = [];
     const seenExternalIds = new Set<string>();
     let rejected = 0;
+    let totalRawPostingsFetched = 0;
+    let latestReportedTotal: number | undefined = undefined;
+    let paginationExhausted = false;
+    let pageErrorOccurred = false;
+    let errorReason = '';
+
+    // Reset scan completeness state at the start of discovery
+    if (this.hasFacets()) {
+      this.lastScanComplete = false;
+      this.lastScanCompletenessReason = 'CONFIGURED_FACETS';
+    } else {
+      this.lastScanComplete = false;
+      this.lastScanCompletenessReason = 'SCAN_IN_PROGRESS';
+    }
 
     for (let page = 0; page < this.config.maxPages; page++) {
       const offset = page * this.config.pageSize;
@@ -313,12 +355,16 @@ export class WorkdayCollector extends BaseCollector {
             { status: response.status, offset },
             'WORKDAY_FETCH HTTP error fetching jobs page'
           );
+          pageErrorOccurred = true;
+          errorReason = `HTTP_ERROR_${response.status}`;
           break;
         }
 
         const json = (await response.json()) as unknown;
         if (!json || typeof json !== 'object' || !Array.isArray((json as WorkdaySearchResponse).jobPostings)) {
           this.log.error({ offset }, 'WORKDAY_FETCH malformed response (missing jobPostings)');
+          pageErrorOccurred = true;
+          errorReason = 'MALFORMED_RESPONSE';
           break;
         }
         searchResponse = json as WorkdaySearchResponse;
@@ -327,12 +373,31 @@ export class WorkdayCollector extends BaseCollector {
           { err: err instanceof Error ? err.message : String(err), offset },
           'WORKDAY_FETCH network error fetching jobs page'
         );
+        pageErrorOccurred = true;
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('HTTP 500')) {
+          errorReason = 'HTTP_ERROR_500';
+        } else if (msg.includes('HTTP 429')) {
+          errorReason = 'HTTP_ERROR_429';
+        } else if (msg.includes('timed out')) {
+          errorReason = 'TIMEOUT_ERROR';
+        } else {
+          errorReason = 'NETWORK_ERROR';
+        }
         break;
       }
 
+      // Track upstream total (adapting if total shifts dynamically during pagination)
+      if (typeof searchResponse.total === 'number') {
+        latestReportedTotal = searchResponse.total;
+      }
+
       const postings = searchResponse.jobPostings ?? [];
+      totalRawPostingsFetched += postings.length;
+
       if (postings.length === 0) {
         this.log.info({ page: page + 1 }, 'WORKDAY_FETCH reached end of listings (empty page)');
+        paginationExhausted = true;
         break;
       }
 
@@ -408,14 +473,54 @@ export class WorkdayCollector extends BaseCollector {
         candidates.push(candidate);
       }
 
-      // If we got fewer results than pageSize or reached total, stop pagination
-      if (postings.length < this.config.pageSize || (searchResponse.total && candidates.length >= searchResponse.total)) {
+      // Check if pagination reached the natural end of results
+      if (postings.length < this.config.pageSize) {
+        paginationExhausted = true;
+        break;
+      }
+
+      // Check if total reported by upstream has been reached or exceeded
+      if (latestReportedTotal !== undefined && offset + postings.length >= latestReportedTotal) {
+        paginationExhausted = true;
         break;
       }
     }
 
+    // Determine final scan completeness
+    if (pageErrorOccurred) {
+      this.lastScanComplete = false;
+      this.lastScanCompletenessReason = errorReason;
+      this.log.warn(
+        { reason: errorReason, candidates: candidates.length },
+        'WORKDAY_SCAN_INCOMPLETE: scan aborted due to error — marked incomplete for absence safety'
+      );
+    } else if (this.hasFacets()) {
+      this.lastScanComplete = false;
+      this.lastScanCompletenessReason = 'CONFIGURED_FACETS';
+    } else if (paginationExhausted) {
+      this.lastScanComplete = true;
+      this.lastScanCompletenessReason = 'FULL_ENUMERATION';
+      this.log.info(
+        { totalFetched: totalRawPostingsFetched, reportedTotal: latestReportedTotal },
+        'WORKDAY_SCAN_COMPLETE: all available postings enumerated'
+      );
+    } else {
+      // Loop finished because page reached maxPages without exhausting pagination
+      this.lastScanComplete = false;
+      this.lastScanCompletenessReason = 'TRUNCATED_BY_MAX_PAGES';
+      this.log.warn(
+        {
+          maxPages: this.config.maxPages,
+          pageSize: this.config.pageSize,
+          totalFetched: totalRawPostingsFetched,
+          reportedTotal: latestReportedTotal,
+        },
+        'WORKDAY_SCAN_TRUNCATED: maxPages cap reached before exhausting all jobs — marked incomplete for absence safety'
+      );
+    }
+
     this.log.info(
-      { accepted: candidates.length, rejected, totalDiscovered: candidates.length },
+      { accepted: candidates.length, rejected, totalDiscovered: candidates.length, isCompleteScan: this.isCompleteScan() },
       'WORKDAY_NORMALIZE discovery complete'
     );
 

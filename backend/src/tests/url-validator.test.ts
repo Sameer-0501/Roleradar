@@ -157,4 +157,43 @@ describe('validateJobUrl', () => {
     expect(result.valid).toBe(false);
     expect(result.reason).toMatch(/individual job/i);
   });
+
+  // ── Provenance & Anti-Tampering Hardening ──────────────────────────────────
+  describe('Security & Provenance Anti-Tampering Checks', () => {
+    const DOMAIN = 'omnissa.wd501.myworkdayjobs.com';
+
+    it('rejects URLs with embedded userinfo credentials (user-info trick)', () => {
+      const res = validateJobUrl(`https://omnissa.wd501.myworkdayjobs.com@evil.com/Omnissa_External_Career_Site/job/123`, DOMAIN);
+      expect(res.valid).toBe(false);
+    });
+
+    it('rejects URLs with embedded username/password even on valid host', () => {
+      const res = validateJobUrl(`https://admin:secret@omnissa.wd501.myworkdayjobs.com/Omnissa_External_Career_Site/job/123`, DOMAIN);
+      expect(res.valid).toBe(false);
+      expect(res.reason).toContain('userinfo');
+    });
+
+    it('rejects URLs with non-standard ports (e.g. 8443, 8080)', () => {
+      const res = validateJobUrl(`https://omnissa.wd501.myworkdayjobs.com:8443/Omnissa_External_Career_Site/job/123`, DOMAIN);
+      expect(res.valid).toBe(false);
+      expect(res.reason).toContain('non-standard port');
+    });
+
+    it('rejects hostname prefix lookalikes', () => {
+      const res = validateJobUrl(`https://attacker-omnissa.wd501.myworkdayjobs.com/Omnissa_External_Career_Site/job/123`, DOMAIN);
+      expect(res.valid).toBe(false);
+      expect(res.reason).toContain('does not match');
+    });
+
+    it('rejects hostname suffix lookalikes', () => {
+      const res = validateJobUrl(`https://omnissa.wd501.myworkdayjobs.com.attacker.com/Omnissa_External_Career_Site/job/123`, DOMAIN);
+      expect(res.valid).toBe(false);
+      expect(res.reason).toContain('does not match');
+    });
+
+    it('rejects generic root / portal homepages', () => {
+      expect(validateJobUrl(`https://omnissa.wd501.myworkdayjobs.com/`, DOMAIN).valid).toBe(false);
+      expect(validateJobUrl(`https://omnissa.wd501.myworkdayjobs.com/Omnissa_External_Career_Site`, DOMAIN).valid).toBe(false);
+    });
+  });
 });
