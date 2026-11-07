@@ -157,3 +157,4 @@ All admitted employers have been registered in `backend/src/sources/catalog.ts`:
   - `backend/src/scripts/probe-workday-batch8.ts` (Untracked: Discovery probe script)
   - `backend/src/tests/workday-batch8-integration.test.ts` (Untracked: Integration suite)
   - `docs/ROLERADAR_WORKDAY_BATCH8_ADMISSION_REPORT.md` (Untracked: Shareable report)
+

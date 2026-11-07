@@ -271,7 +271,7 @@ export class WindowedDigestWorker {
       const localDate = this.getLocalDateString(tz);
       const idempotencyKey = `${user.id}:${localDate}:${activeWindow}:WINDOWED_DIGEST`;
 
-      // 3. Atomically attempt to create the WINDOWED_DIGEST intent for this window
+      // 3. Atomically attempt to create or claim the WINDOWED_DIGEST intent for this window
       let digestRecord: any = null;
       try {
         const [inserted] = await db
@@ -289,13 +289,39 @@ export class WindowedDigestWorker {
           })
           .returning({ id: schema.notifications.id });
         
-        if (!inserted) {
-          // Another worker already claimed this window for this user
-          continue; 
+        if (inserted) {
+          digestRecord = inserted;
+        } else {
+          // If a record already exists with this idempotency key, check if it was reset to PENDING (e.g. from user/admin retry).
+          // Atomically transition PENDING -> PROCESSING so retried dispatches are claimed in-place rather than deadlocked.
+          const [claimed] = await db
+            .update(schema.notifications)
+            .set({
+              delivery_status: 'PROCESSING',
+              attempt_count: sql`${schema.notifications.attempt_count} + 1`,
+              last_attempted_at: new Date(),
+            })
+            .where(
+              and(
+                eq(schema.notifications.idempotency_key, idempotencyKey),
+                eq(schema.notifications.delivery_status, 'PENDING')
+              )
+            )
+            .returning({ id: schema.notifications.id });
+
+          if (claimed) {
+            digestRecord = claimed;
+            log.info(
+              { digestId: claimed.id, userId: user.id, window: activeWindow },
+              'Claimed existing PENDING/retried digest for windowed processing'
+            );
+          } else {
+            // Another worker is actively processing, or the digest has already been SENT or marked FAILED_PERMANENT
+            continue;
+          }
         }
-        digestRecord = inserted;
       } catch (err) {
-        log.error({ err, userId: user.id }, 'Failed to create digest intent');
+        log.error({ err, userId: user.id }, 'Failed to create or claim digest intent');
         continue;
       }
 

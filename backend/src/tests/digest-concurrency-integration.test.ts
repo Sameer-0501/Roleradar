@@ -5,6 +5,8 @@ import { schema } from '../database/index.js';
 import { eq, sql } from 'drizzle-orm';
 import { windowedDigestWorker } from '../notifications/digest-worker.js';
 import { config } from '../config/env.js';
+import { setEmailProviderForTesting } from '../notifications/email/provider-factory.js';
+import { ConsoleEmailProvider } from '../notifications/email/providers/console-provider.js';
 
 describe('Windowed Digest Concurrency & Budget Constraints', () => {
   const db = getDb();
@@ -14,6 +16,7 @@ describe('Windowed Digest Concurrency & Budget Constraints', () => {
   let todayUtc = new Date().toISOString().split('T')[0];
 
   beforeAll(async () => {
+    setEmailProviderForTesting(new ConsoleEmailProvider());
     // Initial cleanup of any stale test data
     await db.execute(sql`DELETE FROM jobs WHERE company_id IN (SELECT id FROM companies WHERE name = 'Concurrency Test Corp')`);
     await db.delete(schema.companies).where(eq(schema.companies.name, 'Concurrency Test Corp'));
@@ -69,6 +72,7 @@ describe('Windowed Digest Concurrency & Budget Constraints', () => {
     await db.delete(schema.companies).where(eq(schema.companies.name, 'Concurrency Test Corp'));
     await db.delete(schema.users).where(eq(schema.users.email, 'digest.concurrency1@roleradar.dev'));
     await db.delete(schema.users).where(eq(schema.users.email, 'digest.concurrency2@roleradar.dev'));
+    setEmailProviderForTesting(null);
   });
 
   beforeEach(async () => {
@@ -303,6 +307,70 @@ describe('Windowed Digest Concurrency & Budget Constraints', () => {
       (windowedDigestWorker as any).getActiveWindowForTimezone = originalGetWindow;
       (config as any).emailDailySafetyBudget = originalBudget;
       await db.execute(sql`DELETE FROM jobs WHERE external_job_id LIKE 'ext-budget-%'`);
+    }
+  });
+
+  it('claims an existing PENDING retried digest in-place rather than deadlocking on unique constraint', async () => {
+    const originalGetWindow = (windowedDigestWorker as any).getActiveWindowForTimezone;
+    (windowedDigestWorker as any).getActiveWindowForTimezone = () => '19:00';
+
+    try {
+      // 1. Create a job for user 1
+      const [job] = await db.insert(schema.jobs).values({
+        company_id: testCompanyId,
+        source_system: 'CUSTOM',
+        external_job_id: `ext-retry-test-1`,
+        title: `Retry Test Job`,
+        official_url: `https://concurrency.test/jobs/retry-1`,
+        content_hash: `hash-retry-1`,
+        status: 'ACTIVE',
+        verification_status: 'VERIFIED',
+      }).returning({ id: schema.jobs.id });
+
+      await db.insert(schema.notifications).values({
+        user_id: testUserId1,
+        job_id: job!.id,
+        notification_type: 'INSTANT_JOB',
+        delivery_status: 'PENDING',
+        idempotency_key: `test_retry_notif_1`,
+      });
+
+      // 2. Pre-insert a retried WINDOWED_DIGEST in PENDING status (as done by retry endpoints)
+      const localDate = (windowedDigestWorker as any).getLocalDateString('Asia/Kolkata');
+      const idempotencyKey = `${testUserId1}:${localDate}:19:00:WINDOWED_DIGEST`;
+
+      const [retriedDigest] = await db.insert(schema.notifications).values({
+        user_id: testUserId1,
+        notification_type: 'WINDOWED_DIGEST',
+        delivery_status: 'PENDING',
+        attempt_count: 0,
+        idempotency_key: idempotencyKey,
+      }).returning({ id: schema.notifications.id });
+
+      // 3. Process cycle — worker must claim the existing PENDING digest in-place rather than skip on conflict
+      await windowedDigestWorker.processCycle(testUserId1);
+
+      // Verify the digest was claimed and successfully dispatched (not created as duplicate)
+      const digests = (await db.execute(sql`
+        SELECT * FROM notifications 
+        WHERE user_id = ${testUserId1} AND notification_type = 'WINDOWED_DIGEST'
+      `)).rows;
+
+      expect(digests.length).toBe(1);
+      expect(digests[0]!.id).toBe(retriedDigest!.id);
+      expect(digests[0]!.delivery_status).toBe('SENT');
+      expect(digests[0]!.sent_at).not.toBeNull();
+
+      // Verify the job was linked to this claimed digest
+      const jobNotif = (await db.execute(sql`
+        SELECT * FROM notifications 
+        WHERE user_id = ${testUserId1} AND notification_type = 'INSTANT_JOB'
+      `)).rows;
+      expect(jobNotif[0]!.delivery_status).toBe('SENT');
+      expect(jobNotif[0]!.digest_id).toBe(retriedDigest!.id);
+    } finally {
+      (windowedDigestWorker as any).getActiveWindowForTimezone = originalGetWindow;
+      await db.execute(sql`DELETE FROM jobs WHERE external_job_id LIKE 'ext-retry-test-%'`);
     }
   });
 });

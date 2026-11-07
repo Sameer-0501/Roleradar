@@ -18,6 +18,7 @@ export interface SmtpConfig {
   user?: string;
   pass?: string;
   secure?: boolean;
+  family?: number;
   defaultFrom: string;
 }
 
@@ -31,11 +32,12 @@ export class SmtpEmailProvider implements IEmailProvider {
       host: config.host,
       port: config.port,
       secure: config.secure ?? (config.port === 465),
+      family: config.family ?? 4, // Enforce IPv4 by default to eliminate Windows dual-stack IPv6 socket negotiation stalls with upstream SMTP servers like Gmail
       auth: config.user && config.pass ? { user: config.user, pass: config.pass } : undefined,
       connectionTimeout: 10_000,
       greetingTimeout: 10_000,
       socketTimeout: 15_000,
-    });
+    } as any);
   }
 
   getProviderName(): string {
