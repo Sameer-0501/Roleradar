@@ -1,0 +1,97 @@
+/**
+ * RoleRadar Skeleton Loading Screen Styles (Item 1)
+ *
+ * Implements smooth animated shimmer placeholders for tables, cards, metrics, and profiles.
+ * Preserves layout height and prevents Cumulative Layout Shift (CLS).
+ */
+
+@keyframes rr-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.rr-skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(229, 231, 235, 0.6) 0%,
+    rgba(243, 244, 246, 0.9) 50%,
+    rgba(229, 231, 235, 0.6) 100%
+  );
+  background-size: 200% 100%;
+  animation: rr-shimmer 1.8s ease-in-out infinite;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+/* Card Skeleton */
+.rr-skeleton-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* Skeleton Lines */
+.rr-skeleton-line {
+  height: 14px;
+  width: 100%;
+}
+
+.rr-skeleton-title {
+  height: 22px;
+  width: 60%;
+}
+
+.rr-skeleton-sub {
+  height: 16px;
+  width: 40%;
+}
+
+.rr-skeleton-badge {
+  height: 20px;
+  width: 80px;
+  border-radius: 9999px;
+}
+
+/* Skeleton Grid */
+.rr-skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.25rem;
+}
+
+/* Skeleton Table Rows */
+.rr-skeleton-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.rr-skeleton-table td {
+  padding: 1rem;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+/* Skeleton Metrics Row */
+.rr-skeleton-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.rr-skeleton-metric-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1.25rem;
+  height: 90px;
+}
+

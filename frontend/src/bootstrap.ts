@@ -17,6 +17,7 @@ import {
   updateNavActiveState,
   resetNavForTesting,
 } from './services/ui/navigation.js';
+import { initRumTracker } from './utils/rumTracker.js';
 
 export interface BootstrapResult {
   router: Router;
@@ -93,7 +94,10 @@ export function initApp(options: BootstrapOptions = {}): BootstrapResult {
   // 3. Attach responsive shell navigation events
   setupNav();
 
-  // 4. Start canonical router (attaches hashchange and renders initial view)
+  // 4. Initialize Real-User Monitoring (RUM) & Web Vitals Tracker (Item 30)
+  initRumTracker();
+
+  // 5. Start canonical router (attaches hashchange and renders initial view)
   activeRouter.start();
 
   return {

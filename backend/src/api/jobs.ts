@@ -17,6 +17,7 @@ import { schema } from '../database/index.js';
 import { createLogger } from '../utils/logger.js';
 import { evaluateJobFreshness } from '../matching/relevance/freshness-evaluator.js';
 import { parseExperienceRequirements } from '../matching/experience-parser.js';
+import { cacheService } from '../cache/redis-cache.js';
 
 const log = createLogger('api:jobs');
 
@@ -40,7 +41,11 @@ export async function listJobsHandler(req: Request, res: Response): Promise<void
       parseInt(String(req.query['limit'] ?? DEFAULT_LIMIT), 10) || DEFAULT_LIMIT,
       MAX_LIMIT
     );
-    const offset = parseInt(String(req.query['offset'] ?? 0), 10) || 0;
+    const pageParam = parseInt(String(req.query['page'] ?? ''), 10);
+    const offset = req.query['offset'] !== undefined
+      ? parseInt(String(req.query['offset']), 10) || 0
+      : (pageParam > 0 ? (pageParam - 1) * limit : 0);
+    const currentPage = pageParam > 0 ? pageParam : Math.floor(offset / limit) + 1;
     const daysParam = parseInt(String(req.query['days'] ?? ''), 10);
     const statusParam = req.query['status'] as any;
 
@@ -88,7 +93,7 @@ export async function listJobsHandler(req: Request, res: Response): Promise<void
 
     res.json({
       jobs,
-      pagination: { limit, offset, count: jobs.length },
+      pagination: { limit, offset, page: currentPage, count: jobs.length },
     });
   } catch (err) {
     log.error({ err: err instanceof Error ? err.message : String(err) }, 'listJobsHandler error');
@@ -111,8 +116,21 @@ export async function listVerifiedJobsHandler(req: Request, res: Response): Prom
       parseInt(String(req.query['limit'] ?? DEFAULT_LIMIT), 10) || DEFAULT_LIMIT,
       MAX_LIMIT
     );
-    const offset = parseInt(String(req.query['offset'] ?? 0), 10) || 0;
+    const pageParam = parseInt(String(req.query['page'] ?? ''), 10);
+    const offset = req.query['offset'] !== undefined
+      ? parseInt(String(req.query['offset']), 10) || 0
+      : (pageParam > 0 ? (pageParam - 1) * limit : 0);
+    const currentPage = pageParam > 0 ? pageParam : Math.floor(offset / limit) + 1;
     const daysParam = parseInt(String(req.query['days'] ?? ''), 10);
+
+    // Cache-aside check with Redis/Memory cache (Item 10)
+    const cacheKey = `jobs:verified:${limit}:${offset}:${daysParam || 'all'}`;
+    const cached = await cacheService.get<any>(cacheKey);
+    if (cached) {
+      res.setHeader('X-Cache', 'HIT');
+      res.json(cached);
+      return;
+    }
 
     const conditions: any[] = [
       eq(schema.jobs.status, 'ACTIVE'),
@@ -153,10 +171,16 @@ export async function listVerifiedJobsHandler(req: Request, res: Response): Prom
       .limit(limit)
       .offset(offset);
 
-    res.json({
+    const responsePayload = {
       jobs,
-      pagination: { limit, offset, count: jobs.length },
-    });
+      pagination: { limit, offset, page: currentPage, count: jobs.length },
+    };
+
+    // Store in cache with 60 second TTL
+    await cacheService.set(cacheKey, responsePayload, 60);
+
+    res.setHeader('X-Cache', 'MISS');
+    res.json(responsePayload);
   } catch (err) {
     log.error(
       { err: err instanceof Error ? err.message : String(err) },

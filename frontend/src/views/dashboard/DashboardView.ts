@@ -19,6 +19,7 @@ import {
 import { renderDashboardPreferencesSummary } from '../../modules/onboarding/onboarding-ui.js';
 import { openJobDetailModal } from '../../components/JobDetailModal.js';
 import { showToast as defaultShowToast } from '../../services/ui/toast.js';
+import { renderJobCardsSkeleton, renderMetricsSkeleton } from '../../components/SkeletonLoader.js';
 
 export { openJobDetailModal };
 
@@ -455,101 +456,122 @@ export function mountDashboardView(options: DashboardViewOptions): DashboardView
   const bindJobCardActions = (scopeContainer: HTMLElement): void => {
     if (!scopeContainer || isDestroyed) return;
 
-    // Save / Unsave Toggle
+    // Save / Unsave Toggle (Optimistic UI: Item 14)
     scopeContainer.querySelectorAll<HTMLElement>('[data-job-save-id]').forEach(function (btn) {
       const handleSave = async (e: Event) => {
         e.stopPropagation();
         const jobId = btn.getAttribute('data-job-save-id');
         if (!jobId || isDestroyed) return;
-        const isSaved = btn.classList.contains('vjc__btn-action--saved');
-        btn.setAttribute('disabled', 'true');
+        const wasSaved = btn.classList.contains('vjc__btn-action--saved');
+
+        // Optimistically update UI immediately (0ms latency)
+        if (wasSaved) {
+          btn.classList.remove('vjc__btn-action--saved');
+          btn.textContent = '♡ Save';
+          btn.setAttribute('aria-pressed', 'false');
+          showToast('Job removed from saved list', 'info');
+        } else {
+          btn.classList.add('vjc__btn-action--saved');
+          btn.textContent = '♥ Saved';
+          btn.setAttribute('aria-pressed', 'true');
+          showToast('Job saved to your workspace!', 'success');
+        }
 
         try {
-          if (isSaved) {
+          if (wasSaved) {
             await workspaceService.unsaveJob(jobId);
-            if (isDestroyed) return;
-            btn.classList.remove('vjc__btn-action--saved');
-            btn.textContent = '♡ Save';
-            btn.setAttribute('aria-pressed', 'false');
-            showToast('Job removed from saved list', 'info');
           } else {
             await workspaceService.saveJob(jobId);
-            if (isDestroyed) return;
-            btn.classList.add('vjc__btn-action--saved');
-            btn.textContent = '♥ Saved';
-            btn.setAttribute('aria-pressed', 'true');
-            showToast('Job saved to your workspace!', 'success');
           }
           void refreshStats();
         } catch (err) {
-          showToast('Failed to update saved state', 'error');
-        } finally {
-          btn.removeAttribute('disabled');
+          if (!isDestroyed) {
+            if (wasSaved) {
+              btn.classList.add('vjc__btn-action--saved');
+              btn.textContent = '♥ Saved';
+              btn.setAttribute('aria-pressed', 'true');
+            } else {
+              btn.classList.remove('vjc__btn-action--saved');
+              btn.textContent = '♡ Save';
+              btn.setAttribute('aria-pressed', 'false');
+            }
+            showToast('Failed to update saved state. Reverted.', 'error');
+          }
         }
       };
       addTrackedListener(btn, 'click', handleSave);
     });
 
-    // Mark Applied / Undo Applied Toggle
+    // Mark Applied / Undo Applied Toggle (Optimistic UI: Item 14)
     scopeContainer.querySelectorAll<HTMLElement>('[data-job-apply-id]').forEach(function (btn) {
       const handleApply = async (e: Event) => {
         e.stopPropagation();
         const jobId = btn.getAttribute('data-job-apply-id');
         if (!jobId || isDestroyed) return;
-        const isApplied = btn.classList.contains('vjc__btn-action--applied');
-        btn.setAttribute('disabled', 'true');
+        const wasApplied = btn.classList.contains('vjc__btn-action--applied');
+
+        // Optimistically update UI immediately (0ms latency)
+        if (wasApplied) {
+          btn.classList.remove('vjc__btn-action--applied');
+          btn.textContent = 'Mark Applied';
+          btn.setAttribute('aria-pressed', 'false');
+          showToast('Application record undone', 'info');
+        } else {
+          btn.classList.add('vjc__btn-action--applied');
+          btn.textContent = '✓ Applied';
+          btn.setAttribute('aria-pressed', 'true');
+          showToast('Job marked as applied! Tracked in workspace.', 'success');
+        }
 
         try {
-          if (isApplied) {
+          if (wasApplied) {
             await workspaceService.unmarkJobApplied(jobId);
-            if (isDestroyed) return;
-            btn.classList.remove('vjc__btn-action--applied');
-            btn.textContent = 'Mark Applied';
-            btn.setAttribute('aria-pressed', 'false');
-            showToast('Application record undone', 'info');
           } else {
             await workspaceService.markJobApplied(jobId);
-            if (isDestroyed) return;
-            btn.classList.add('vjc__btn-action--applied');
-            btn.textContent = '✓ Applied';
-            btn.setAttribute('aria-pressed', 'true');
-            showToast('Job marked as applied! Tracked in workspace.', 'success');
           }
           void refreshStats();
         } catch (err) {
-          showToast('Failed to update application state', 'error');
-        } finally {
-          btn.removeAttribute('disabled');
+          if (!isDestroyed) {
+            if (wasApplied) {
+              btn.classList.add('vjc__btn-action--applied');
+              btn.textContent = '✓ Applied';
+              btn.setAttribute('aria-pressed', 'true');
+            } else {
+              btn.classList.remove('vjc__btn-action--applied');
+              btn.textContent = 'Mark Applied';
+              btn.setAttribute('aria-pressed', 'false');
+            }
+            showToast('Failed to update application state. Reverted.', 'error');
+          }
         }
       };
       addTrackedListener(btn, 'click', handleApply);
     });
 
-    // Dismiss (Hide) Action
+    // Dismiss (Hide) Action (Optimistic UI: Item 14)
     scopeContainer.querySelectorAll<HTMLElement>('[data-job-dismiss-id]').forEach(function (btn) {
       const handleDismiss = async (e: Event) => {
         e.stopPropagation();
         const jobId = btn.getAttribute('data-job-dismiss-id');
         if (!jobId || isDestroyed) return;
-        btn.setAttribute('disabled', 'true');
+
+        // Optimistically remove card immediately
+        const card = container.querySelector<HTMLElement>('#job-card-' + jobId);
+        if (card) {
+          card.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+          card.style.opacity = '0';
+          card.style.transform = 'scale(0.95)';
+          setTimeout(() => {
+            if (card && card.parentNode) card.parentNode.removeChild(card);
+          }, 200);
+        }
+        showToast('Job hidden from feed. You can restore it in Hidden Jobs.', 'info');
 
         try {
           await workspaceService.dismissJob(jobId);
-          if (isDestroyed) return;
-          const card = container.querySelector<HTMLElement>('#job-card-' + jobId);
-          if (card) {
-            card.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
-            card.style.opacity = '0';
-            card.style.transform = 'scale(0.95)';
-            setTimeout(() => {
-              if (card && card.parentNode) card.parentNode.removeChild(card);
-            }, 250);
-          }
-          showToast('Job hidden from feed. You can restore it in Hidden Jobs.', 'info');
           void refreshStats();
         } catch (err) {
-          btn.removeAttribute('disabled');
-          showToast('Failed to hide job', 'error');
+          showToast('Failed to hide job on server.', 'error');
         }
       };
       addTrackedListener(btn, 'click', handleDismiss);
@@ -569,7 +591,7 @@ export function mountDashboardView(options: DashboardViewOptions): DashboardView
   };
 
   // ───────────────────────────────────────────────────────────────────────────
-  // Async Hydration & Feed Loading
+  // Async Hydration & Feed Loading (Parallelized & Skeleton-driven: Items 1 & 16)
   // ───────────────────────────────────────────────────────────────────────────
   (async () => {
     const statsSlot = container.querySelector<HTMLElement>('#dashboard-stats-slot');
@@ -579,11 +601,47 @@ export function mountDashboardView(options: DashboardViewOptions): DashboardView
 
     if (!prefsSlot || !feedSlot) return;
 
-    // 1. Load Workspace Stats Counters
+    // Show initial skeleton loading screens immediately (0ms visual feedback)
     if (statsSlot && authService.isAuthenticated()) {
+      statsSlot.innerHTML = renderMetricsSkeleton(3);
+    }
+    feedSlot.innerHTML = renderJobCardsSkeleton(4);
+
+    // Read cached preferences synchronously from localStorage if available
+    let cachedPrefs: UserPreferences | null = null;
+    if (typeof localStorage !== 'undefined') {
       try {
-        const stats: WorkspaceStatsResponse = await workspaceService.getWorkspaceStats();
-        if (isDestroyed) return;
+        const raw = localStorage.getItem('roleradar_preferences');
+        if (raw) cachedPrefs = JSON.parse(raw);
+      } catch (e) {}
+    }
+
+    // Launch independent requests in parallel (Item 16)
+    const isAuth = authService.isAuthenticated();
+    const statsPromise = (statsSlot && isAuth)
+      ? workspaceService.getWorkspaceStats()
+      : Promise.resolve(null);
+    const prefsPromise = (!cachedPrefs && isAuth)
+      ? preferencesService.getPreferences()
+      : Promise.resolve(cachedPrefs);
+    const recentPromise = (recentSlot && isAuth)
+      ? workspaceService.getRecentlyViewedJobs(6)
+      : Promise.resolve(null);
+    const matchesPromise = jobsService.getMatchedJobs({ page: 1, limit: 10, sort: 'BEST_MATCH' });
+
+    const [statsResult, prefsResult, recentResult, matchesResult] = await Promise.allSettled([
+      statsPromise,
+      prefsPromise,
+      recentPromise,
+      matchesPromise,
+    ]);
+
+    if (isDestroyed) return;
+
+    // 1. Render Stats
+    if (statsSlot && isAuth) {
+      if (statsResult.status === 'fulfilled' && statsResult.value) {
+        const stats = statsResult.value as WorkspaceStatsResponse;
         statsSlot.innerHTML = (
           '<div class="workspace-stats-grid">' +
             '<div class="workspace-stat-card">' +
@@ -612,30 +670,19 @@ export function mountDashboardView(options: DashboardViewOptions): DashboardView
             '</div>' +
           '</div>'
         );
-      } catch (e) {
-        if (!isDestroyed) statsSlot.innerHTML = '';
+      } else {
+        statsSlot.innerHTML = '';
       }
     }
 
-    // 2. Load and verify Candidate Preferences
-    let prefs: UserPreferences | null = null;
-    if (typeof localStorage !== 'undefined') {
-      try {
-        const raw = localStorage.getItem('roleradar_preferences');
-        if (raw) prefs = JSON.parse(raw);
-      } catch (e) {}
+    // 2. Render Preferences Summary
+    let prefs: UserPreferences | null = cachedPrefs;
+    if (prefsResult.status === 'fulfilled' && prefsResult.value) {
+      prefs = prefsResult.value as UserPreferences;
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('roleradar_preferences', JSON.stringify(prefs));
+      }
     }
-
-    if (!prefs && authService.isAuthenticated()) {
-      try {
-        prefs = await preferencesService.getPreferences();
-        if (prefs && typeof localStorage !== 'undefined') {
-          localStorage.setItem('roleradar_preferences', JSON.stringify(prefs));
-        }
-      } catch (e) {}
-    }
-
-    if (isDestroyed) return;
 
     const hasPreferences = prefs && (
       (prefs.roles && prefs.roles.length > 0) ||
@@ -648,70 +695,61 @@ export function mountDashboardView(options: DashboardViewOptions): DashboardView
         onNavigate('#/preferences');
       });
 
-      let isFetching = false;
-      const fetchLatestMatches = async (showLoading: boolean): Promise<void> => {
-        if (isFetching || isDestroyed) return;
-        isFetching = true;
+      // 3. Render Matched Jobs Feed
+      if (matchesResult.status === 'fulfilled' && matchesResult.value) {
+        const data = matchesResult.value;
+        const matches = data.jobs || [];
 
-        try {
-          if (showLoading) {
-            feedSlot.innerHTML = loadingHtml('Finding verified jobs matching your profile...');
-          }
+        if (matches.length > 0) {
+          const cardsHtml = matches.map((job: Job) => verifiedJobCardHtml(job, { context: 'feed' })).join('');
+          feedSlot.innerHTML =
+            '<div class="dashboard-feed-header">' +
+              '<h2 class="kn-heading-2 dashboard-feed-title">🎯 Recommended Verified Matches' +
+                (data.totalMatches ? ' <span class="dashboard-feed-count">(' + data.totalMatches + ' total)</span>' : '') +
+              '</h2>' +
+              '<a href="#/dashboard/verified-jobs" class="kn-btn kn-btn--secondary dashboard-feed-viewall">View All →</a>' +
+            '</div>' +
+            cardsHtml;
 
-          const data = await jobsService.getMatchedJobs({ page: 1, limit: 10, sort: 'BEST_MATCH' });
-          if (isDestroyed) return;
-
-          const matches = data.jobs || [];
-
-          if (matches.length > 0) {
-            const cardsHtml = matches.map((job: Job) => verifiedJobCardHtml(job, { context: 'feed' })).join('');
-            feedSlot.innerHTML =
-              '<div class="dashboard-feed-header">' +
-                '<h2 class="kn-heading-2 dashboard-feed-title">🎯 Recommended Verified Matches' +
-                  (data.totalMatches ? ' <span class="dashboard-feed-count">(' + data.totalMatches + ' total)</span>' : '') +
-                '</h2>' +
-                '<a href="#/dashboard/verified-jobs" class="kn-btn kn-btn--secondary dashboard-feed-viewall">View All →</a>' +
-              '</div>' +
-              cardsHtml;
-
-            bindJobCardActions(feedSlot);
-          } else {
-            feedSlot.innerHTML = emptyStateHtml(
-              '🔍',
-              'No Verified Matches Found Yet',
-              'No active verified jobs strictly matching your target roles, locations, and experience level were found across official company career portals.',
-              '<a href="#/preferences" class="kn-btn kn-btn--secondary">✏️ Edit Preferences</a>'
-            );
-          }
-        } catch (err: unknown) {
-          if (isDestroyed) return;
-          if (showLoading) {
-            const is401 = err && typeof err === 'object' && 'status' in err && (err as { status: number }).status === 401;
-            const errMsg = is401
-              ? 'Session expired. Please sign in again.'
-              : 'Failed to load matched jobs. Please try again.';
-
-            feedSlot.innerHTML = errorStateHtml(errMsg, 'btn-retry-dashboard-feed');
-            const retryBtn = feedSlot.querySelector<HTMLElement>('#btn-retry-dashboard-feed');
-            if (retryBtn) {
-              addTrackedListener(retryBtn, 'click', () => {
-                void fetchLatestMatches(true);
-              });
-            }
-          }
-        } finally {
-          isFetching = false;
+          bindJobCardActions(feedSlot);
+        } else {
+          feedSlot.innerHTML = emptyStateHtml(
+            '🔍',
+            'No Verified Matches Found Yet',
+            'No active verified jobs strictly matching your target roles, locations, and experience level were found across official company career portals.',
+            '<a href="#/preferences" class="kn-btn kn-btn--secondary">✏️ Edit Preferences</a>'
+          );
         }
-      };
+      } else {
+        feedSlot.innerHTML = errorStateHtml('Failed to load matched jobs. Please try again.', 'btn-retry-dashboard-feed');
+        const retryBtn = feedSlot.querySelector<HTMLElement>('#btn-retry-dashboard-feed');
+        if (retryBtn) {
+          addTrackedListener(retryBtn, 'click', () => {
+            feedSlot.innerHTML = renderJobCardsSkeleton(4);
+            jobsService.getMatchedJobs({ page: 1, limit: 10, sort: 'BEST_MATCH' }).then((data) => {
+              if (isDestroyed) return;
+              const matches = data.jobs || [];
+              if (matches.length > 0) {
+                const cardsHtml = matches.map((job: Job) => verifiedJobCardHtml(job, { context: 'feed' })).join('');
+                feedSlot.innerHTML =
+                  '<div class="dashboard-feed-header">' +
+                    '<h2 class="kn-heading-2 dashboard-feed-title">🎯 Recommended Verified Matches' +
+                      (data.totalMatches ? ' <span class="dashboard-feed-count">(' + data.totalMatches + ' total)</span>' : '') +
+                    '</h2>' +
+                    '<a href="#/dashboard/verified-jobs" class="kn-btn kn-btn--secondary dashboard-feed-viewall">View All →</a>' +
+                  '</div>' +
+                  cardsHtml;
+                bindJobCardActions(feedSlot);
+              }
+            }).catch(() => {});
+          });
+        }
+      }
 
-      await fetchLatestMatches(true);
-
-      // 3. Load Recently Viewed Jobs
-      if (recentSlot && authService.isAuthenticated()) {
-        try {
-          const recData = await workspaceService.getRecentlyViewedJobs(6);
-          if (isDestroyed) return;
-
+      // 4. Load Recently Viewed Jobs
+      if (recentSlot && isAuth) {
+        if (recentResult.status === 'fulfilled' && recentResult.value) {
+          const recData = recentResult.value;
           const recJobs = recData.items || [];
           if (recJobs.length > 0) {
             const recentCardsHtml = recJobs.map((j: Job) => {
@@ -760,12 +798,12 @@ export function mountDashboardView(options: DashboardViewOptions): DashboardView
           } else {
             recentSlot.innerHTML = '';
           }
-        } catch (e) {
-          if (!isDestroyed) recentSlot.innerHTML = '';
+        } else {
+          recentSlot.innerHTML = '';
         }
       }
 
-      // 4. Background Periodic Polling (every 60s)
+      // 5. Background Periodic Polling (every 60s)
       stopPolling();
       activePollTimer = setInterval(() => {
         if (isDestroyed) {
@@ -777,7 +815,22 @@ export function mountDashboardView(options: DashboardViewOptions): DashboardView
           stopPolling();
           return;
         }
-        void fetchLatestMatches(false);
+        jobsService.getMatchedJobs({ page: 1, limit: 10, sort: 'BEST_MATCH' }).then((data) => {
+          if (isDestroyed) return;
+          const matches = data.jobs || [];
+          if (matches.length > 0) {
+            const cardsHtml = matches.map((job: Job) => verifiedJobCardHtml(job, { context: 'feed' })).join('');
+            feedSlot.innerHTML =
+              '<div class="dashboard-feed-header">' +
+                '<h2 class="kn-heading-2 dashboard-feed-title">🎯 Recommended Verified Matches' +
+                  (data.totalMatches ? ' <span class="dashboard-feed-count">(' + data.totalMatches + ' total)</span>' : '') +
+                '</h2>' +
+                '<a href="#/dashboard/verified-jobs" class="kn-btn kn-btn--secondary dashboard-feed-viewall">View All →</a>' +
+              '</div>' +
+              cardsHtml;
+            bindJobCardActions(feedSlot);
+          }
+        }).catch(() => {});
       }, 60000);
 
     } else {

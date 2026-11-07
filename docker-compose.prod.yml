@@ -1,0 +1,109 @@
+# RoleRadar Production Cluster & Load Balancing Stack (Items 6, 10, 19, 25, 28)
+# Demonstrates horizontal scaling across multiple application instances behind Nginx load balancer
+
+services:
+  # Nginx Load Balancer Reverse Proxy (Item 28)
+  load_balancer:
+    image: nginx:alpine
+    container_name: roleradar_load_balancer
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - app_node_1
+      - app_node_2
+      - app_node_3
+
+  # Application Node Instance 1
+  app_node_1:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: roleradar_app_1
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgres://kcarrier:kcarrier_dev_password@postgres:5432/kcarrier_jobs
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  # Application Node Instance 2
+  app_node_2:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: roleradar_app_2
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgres://kcarrier:kcarrier_dev_password@postgres:5432/kcarrier_jobs
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  # Application Node Instance 3
+  app_node_3:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: roleradar_app_3
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgres://kcarrier:kcarrier_dev_password@postgres:5432/kcarrier_jobs
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  # Redis Persistent In-Memory Cache & Durable Queue Cluster (Items 7 & 10)
+  redis:
+    image: redis:7-alpine
+    container_name: roleradar_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--save", "60 1", "--loglevel", "warning"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_prod_data:/data
+
+  # PostgreSQL Colocated Database (Items 19 & 25)
+  postgres:
+    image: postgres:16-alpine
+    container_name: roleradar_postgres_prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: kcarrier_jobs
+      POSTGRES_USER: kcarrier
+      POSTGRES_PASSWORD: kcarrier_dev_password
+      POSTGRES_HOST_AUTH_METHOD: md5
+    ports:
+      - "5432:5432"
+    volumes:
+      - roleradar_prod_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U kcarrier -d kcarrier_jobs" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  roleradar_prod_db_data:
+    driver: local
+  redis_prod_data:
+    driver: local
+

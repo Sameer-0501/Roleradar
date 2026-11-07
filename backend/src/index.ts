@@ -32,6 +32,9 @@ import { seedSources } from './pipeline/source-seeder.js';
 import { SOURCE_CATALOG } from './sources/catalog.js';
 import { createCollectorForSource } from './sources/source-factory.js';
 import helmet from 'helmet';
+import { httpCompressionMiddleware } from './middleware/compression.js';
+import { staticBrowserCachingMiddleware } from './middleware/static-cache.js';
+import { openTelemetryTracingMiddleware, shutdownOpenTelemetry } from './telemetry/tracer.js';
 
 const log = createLogger('server');
 
@@ -79,6 +82,11 @@ async function bootstrap() {
     })
   );
   app.use(express.json({ limit: '1mb' }));
+
+  // ─── Performance & Observability Middlewares ─────────────────────────────
+  app.use(openTelemetryTracingMiddleware);
+  app.use(httpCompressionMiddleware);
+  app.use(staticBrowserCachingMiddleware);
 
   // ─── Routes ──────────────────────────────────────────────────────────────
   app.use('/api', createRouter());
@@ -248,6 +256,7 @@ async function bootstrap() {
     windowedDigestWorker.stop();
     jobLifecycleWorker.stop();
     verificationRetentionWorker.stop();
+    await shutdownOpenTelemetry();
     await closeConnection();
     server.close(() => {
       log.info('HTTP server closed');

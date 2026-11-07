@@ -1,5 +1,6 @@
 import './index.css';
 import './legacy/design-system/index.css';
+import './legacy/design-system/skeleton.css';
 import './components/LemniscateLoader.js';
 import './legacy/app.css';
 import './legacy/dashboard.css';
@@ -24,4 +25,3 @@ if (typeof document !== 'undefined') {
     initApp();
   }
 }
-

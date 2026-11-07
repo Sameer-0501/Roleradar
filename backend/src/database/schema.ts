@@ -173,6 +173,9 @@ export const jobs = pgTable(
     index('jobs_first_seen_idx').on(t.first_seen_at),
     index('jobs_status_ver_first_seen_idx').on(t.status, t.verification_status, t.first_seen_at),
     index('jobs_status_ver_last_verified_idx').on(t.status, t.verification_status, t.last_verified_at),
+    /** Optimized composite index for verified jobs with rolling freshness window (Item 17) */
+    index('jobs_status_ver_posted_idx').on(t.status, t.verification_status, t.official_posted_at),
+    index('jobs_company_status_idx').on(t.company_id, t.status),
     /** Used by rolling recent-job discovery window queries */
     index('jobs_official_posted_at_idx').on(t.official_posted_at),
   ]

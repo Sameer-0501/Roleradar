@@ -44,19 +44,38 @@ export function getDb() {
   return _db;
 }
 
+export interface DbCheckResult {
+  connected: boolean;
+  latencyMs?: number;
+  error?: string;
+  poolStats?: {
+    total: number;
+    idle: number;
+    waiting: number;
+  };
+}
+
 /**
- * Verify the database is reachable.
- * Returns { connected: true } or { connected: false, error: string }.
+ * Verify the database is reachable and measure round-trip connection latency (Items 19 & 25).
  */
-export async function checkConnection(): Promise<
-  { connected: true } | { connected: false; error: string }
-> {
+export async function checkConnection(): Promise<DbCheckResult> {
+  const start = Date.now();
   try {
     const p = getPool();
     const client = await p.connect();
     await client.query('SELECT 1');
     client.release();
-    return { connected: true };
+    const latencyMs = Date.now() - start;
+
+    return {
+      connected: true,
+      latencyMs,
+      poolStats: {
+        total: p.totalCount,
+        idle: p.idleCount,
+        waiting: p.waitingCount,
+      },
+    };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { connected: false, error: message };

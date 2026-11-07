@@ -13,6 +13,8 @@ import {
   type Job,
   type SearchSuggestionItem,
 } from '../../services/api/index.js';
+import { renderJobCardsSkeleton } from '../../components/SkeletonLoader.js';
+import { debounce } from '../../utils/debounce.js';
 import {
   renderSidebar,
   verifiedJobCardHtml,
@@ -194,98 +196,121 @@ export function mountVerifiedJobsView(options: VerifiedJobsViewOptions): Verifie
   const bindJobCardActions = (scopeContainer: HTMLElement): void => {
     if (!scopeContainer || isDestroyed) return;
 
-    // Save / Unsave Toggle
+    // Save / Unsave Toggle (Optimistic UI: Item 14)
     scopeContainer.querySelectorAll<HTMLElement>('[data-job-save-id]').forEach((btn) => {
       const handleSave = async (e: Event) => {
         e.stopPropagation();
         const jobId = btn.getAttribute('data-job-save-id');
         if (!jobId || isDestroyed) return;
-        const isSaved = btn.classList.contains('vjc__btn-action--saved');
-        btn.setAttribute('disabled', 'true');
+        const wasSaved = btn.classList.contains('vjc__btn-action--saved');
+
+        // Optimistically update UI immediately (0ms latency)
+        if (wasSaved) {
+          btn.classList.remove('vjc__btn-action--saved');
+          btn.textContent = '♡ Save';
+          btn.setAttribute('aria-pressed', 'false');
+          showToast('Job removed from saved list', 'info');
+        } else {
+          btn.classList.add('vjc__btn-action--saved');
+          btn.textContent = '♥ Saved';
+          btn.setAttribute('aria-pressed', 'true');
+          showToast('Job saved to your workspace!', 'success');
+        }
 
         try {
-          if (isSaved) {
+          if (wasSaved) {
             await workspaceService.unsaveJob(jobId);
-            if (isDestroyed) return;
-            btn.classList.remove('vjc__btn-action--saved');
-            btn.textContent = '♡ Save';
-            btn.setAttribute('aria-pressed', 'false');
-            showToast('Job removed from saved list', 'info');
           } else {
             await workspaceService.saveJob(jobId);
-            if (isDestroyed) return;
-            btn.classList.add('vjc__btn-action--saved');
-            btn.textContent = '♥ Saved';
-            btn.setAttribute('aria-pressed', 'true');
-            showToast('Job saved to your workspace!', 'success');
           }
         } catch (err) {
-          showToast('Failed to update saved state', 'error');
-        } finally {
-          btn.removeAttribute('disabled');
+          // Revert optimistic update on failure
+          if (!isDestroyed) {
+            if (wasSaved) {
+              btn.classList.add('vjc__btn-action--saved');
+              btn.textContent = '♥ Saved';
+              btn.setAttribute('aria-pressed', 'true');
+            } else {
+              btn.classList.remove('vjc__btn-action--saved');
+              btn.textContent = '♡ Save';
+              btn.setAttribute('aria-pressed', 'false');
+            }
+            showToast('Failed to update saved state. Reverted.', 'error');
+          }
         }
       };
       addTrackedListener(btn, 'click', handleSave);
     });
 
-    // Mark Applied / Undo Applied Toggle
+    // Mark Applied / Undo Applied Toggle (Optimistic UI: Item 14)
     scopeContainer.querySelectorAll<HTMLElement>('[data-job-apply-id]').forEach((btn) => {
       const handleApply = async (e: Event) => {
         e.stopPropagation();
         const jobId = btn.getAttribute('data-job-apply-id');
         if (!jobId || isDestroyed) return;
-        const isApplied = btn.classList.contains('vjc__btn-action--applied');
-        btn.setAttribute('disabled', 'true');
+        const wasApplied = btn.classList.contains('vjc__btn-action--applied');
+
+        // Optimistically update UI immediately (0ms latency)
+        if (wasApplied) {
+          btn.classList.remove('vjc__btn-action--applied');
+          btn.textContent = 'Mark Applied';
+          btn.setAttribute('aria-pressed', 'false');
+          showToast('Application record undone', 'info');
+        } else {
+          btn.classList.add('vjc__btn-action--applied');
+          btn.textContent = '✓ Applied';
+          btn.setAttribute('aria-pressed', 'true');
+          showToast('Job marked as applied! Tracked in workspace.', 'success');
+        }
 
         try {
-          if (isApplied) {
+          if (wasApplied) {
             await workspaceService.unmarkJobApplied(jobId);
-            if (isDestroyed) return;
-            btn.classList.remove('vjc__btn-action--applied');
-            btn.textContent = 'Mark Applied';
-            btn.setAttribute('aria-pressed', 'false');
-            showToast('Application record undone', 'info');
           } else {
             await workspaceService.markJobApplied(jobId);
-            if (isDestroyed) return;
-            btn.classList.add('vjc__btn-action--applied');
-            btn.textContent = '✓ Applied';
-            btn.setAttribute('aria-pressed', 'true');
-            showToast('Job marked as applied! Tracked in workspace.', 'success');
           }
         } catch (err) {
-          showToast('Failed to update application state', 'error');
-        } finally {
-          btn.removeAttribute('disabled');
+          // Revert optimistic update on failure
+          if (!isDestroyed) {
+            if (wasApplied) {
+              btn.classList.add('vjc__btn-action--applied');
+              btn.textContent = '✓ Applied';
+              btn.setAttribute('aria-pressed', 'true');
+            } else {
+              btn.classList.remove('vjc__btn-action--applied');
+              btn.textContent = 'Mark Applied';
+              btn.setAttribute('aria-pressed', 'false');
+            }
+            showToast('Failed to update application state. Reverted.', 'error');
+          }
         }
       };
       addTrackedListener(btn, 'click', handleApply);
     });
 
-    // Dismiss (Hide) Action
+    // Dismiss (Hide) Action (Optimistic UI: Item 14)
     scopeContainer.querySelectorAll<HTMLElement>('[data-job-dismiss-id]').forEach((btn) => {
       const handleDismiss = async (e: Event) => {
         e.stopPropagation();
         const jobId = btn.getAttribute('data-job-dismiss-id');
         if (!jobId || isDestroyed) return;
-        btn.setAttribute('disabled', 'true');
+
+        // Optimistically animate and remove card immediately
+        const card = container.querySelector<HTMLElement>('#job-card-' + jobId);
+        if (card) {
+          card.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+          card.style.opacity = '0';
+          card.style.transform = 'scale(0.95)';
+          setTimeout(() => {
+            if (card && card.parentNode) card.parentNode.removeChild(card);
+          }, 200);
+        }
+        showToast('Job hidden from feed. You can restore it in Hidden Jobs.', 'info');
 
         try {
           await workspaceService.dismissJob(jobId);
-          if (isDestroyed) return;
-          const card = container.querySelector<HTMLElement>('#job-card-' + jobId);
-          if (card) {
-            card.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
-            card.style.opacity = '0';
-            card.style.transform = 'scale(0.95)';
-            setTimeout(() => {
-              if (card && card.parentNode) card.parentNode.removeChild(card);
-            }, 250);
-          }
-          showToast('Job hidden from feed. You can restore it in Hidden Jobs.', 'info');
         } catch (err) {
-          btn.removeAttribute('disabled');
-          showToast('Failed to hide job', 'error');
+          showToast('Failed to hide job on server.', 'error');
         }
       };
       addTrackedListener(btn, 'click', handleDismiss);
@@ -312,7 +337,7 @@ export function mountVerifiedJobsView(options: VerifiedJobsViewOptions): Verifie
 
     try {
       if (showLoading) {
-        feedEl.innerHTML = loadingHtml('Finding verified jobs matching your profile...');
+        feedEl.innerHTML = renderJobCardsSkeleton(4);
       }
 
       const data = await jobsService.getMatchedJobs(state);
@@ -461,61 +486,75 @@ export function mountVerifiedJobsView(options: VerifiedJobsViewOptions): Verifie
   };
 
   // ───────────────────────────────────────────────────────────────────────────
-  // Search Input & Suggestions
+  // Search Input & Suggestions (Debounced: Item 4)
   // ───────────────────────────────────────────────────────────────────────────
   if (searchInput) {
+    let latestSuggestionQuery = '';
+
+    const debouncedSearchExec = debounce((query: string) => {
+      if (isDestroyed) return;
+      state.q = query;
+      state.page = 1;
+      void fetchJobs(true);
+    }, 300);
+
     addTrackedListener(searchInput, 'input', (e: Event) => {
       const target = e.target as HTMLInputElement;
       const query = (target.value || '').trim();
-      if (searchTimeout) clearTimeout(searchTimeout);
+      latestSuggestionQuery = query;
 
       if (suggestionsEl && query.length >= 2) {
-        jobsService.getSearchSuggestions(query, 6).then((suggestions: SearchSuggestionItem[]) => {
-          if (isDestroyed) return;
-          if (suggestions && suggestions.length > 0) {
-            const suggHtml = suggestions.map((s) => {
-              const text = typeof s === 'string' ? s : s.text;
-              const badge = typeof s === 'string' ? '' : (s.badge || '');
-              const badgeHtml = badge ? '<span class="vjp__sugg-badge">' + escapeHtml(badge) + '</span>' : '';
-              return (
-                '<div class="vjp__sugg-item" data-query="' + escapeHtml(text) + '">' +
-                  '<span class="vjp__sugg-icon">🔍</span>' +
-                  '<span class="vjp__sugg-text">' + escapeHtml(text) + '</span>' +
-                  badgeHtml +
-                '</div>'
-              );
-            }).join('');
+        jobsService
+          .getSearchSuggestions(query, 6)
+          .then((suggestions: SearchSuggestionItem[]) => {
+            if (isDestroyed || latestSuggestionQuery !== query) return;
+            if (suggestions && suggestions.length > 0) {
+              const suggHtml = suggestions
+                .map((s) => {
+                  const text = typeof s === 'string' ? s : s.text;
+                  const badge = typeof s === 'string' ? '' : s.badge || '';
+                  const badgeHtml = badge
+                    ? '<span class="vjp__sugg-badge">' + escapeHtml(badge) + '</span>'
+                    : '';
+                  return (
+                    '<div class="vjp__sugg-item" data-query="' +
+                    escapeHtml(text) +
+                    '">' +
+                    '<span class="vjp__sugg-icon">🔍</span>' +
+                    '<span class="vjp__sugg-text">' +
+                    escapeHtml(text) +
+                    '</span>' +
+                    badgeHtml +
+                    '</div>'
+                  );
+                })
+                .join('');
 
-            suggestionsEl.innerHTML = suggHtml;
-            suggestionsEl.style.display = 'block';
+              suggestionsEl.innerHTML = suggHtml;
+              suggestionsEl.style.display = 'block';
 
-            // Bind click on suggestion items
-            suggestionsEl.querySelectorAll<HTMLElement>('.vjp__sugg-item').forEach((item) => {
-              addTrackedListener(item, 'click', () => {
-                const qVal = item.getAttribute('data-query') || '';
-                searchInput.value = qVal;
-                suggestionsEl.style.display = 'none';
-                state.q = qVal;
-                state.page = 1;
-                void fetchJobs(true);
+              suggestionsEl.querySelectorAll<HTMLElement>('.vjp__sugg-item').forEach((item) => {
+                addTrackedListener(item, 'click', () => {
+                  const qVal = item.getAttribute('data-query') || '';
+                  searchInput.value = qVal;
+                  suggestionsEl.style.display = 'none';
+                  state.q = qVal;
+                  state.page = 1;
+                  void fetchJobs(true);
+                });
               });
-            });
-          } else {
-            suggestionsEl.style.display = 'none';
-          }
-        }).catch(() => {
-          if (suggestionsEl) suggestionsEl.style.display = 'none';
-        });
+            } else {
+              suggestionsEl.style.display = 'none';
+            }
+          })
+          .catch(() => {
+            if (suggestionsEl) suggestionsEl.style.display = 'none';
+          });
       } else if (suggestionsEl) {
         suggestionsEl.style.display = 'none';
       }
 
-      searchTimeout = setTimeout(() => {
-        if (isDestroyed) return;
-        state.q = query;
-        state.page = 1;
-        void fetchJobs(true);
-      }, 300);
+      debouncedSearchExec(query);
     });
 
     // Hide suggestions on outside click

@@ -12,17 +12,21 @@ describe('Timezone Utility', () => {
     expect(kolkataStart.getTime()).toBeLessThanOrEqual(Date.now());
   });
 
-  it('computes timezone start of day within valid 24h window', () => {
+  it('computes timezone start of day within valid 24h window (accounting for 25h DST transitions)', () => {
     const tokyoStart = getStartOfTodayInTimezone('Asia/Tokyo');
     const nyStart = getStartOfTodayInTimezone('America/New_York');
 
     expect(tokyoStart).toBeInstanceOf(Date);
     expect(nyStart).toBeInstanceOf(Date);
-    // Both should be valid dates within 24h of current time
+    expect(tokyoStart.getTime()).toBeLessThanOrEqual(Date.now());
+    expect(nyStart.getTime()).toBeLessThanOrEqual(Date.now());
+
+    // Both should be valid start-of-day timestamps within 26h of current time
+    // (US timezones experience 25-hour calendar days during the November DST "fall back" transition)
     const diffHoursTokyo = Math.abs(Date.now() - tokyoStart.getTime()) / (3600 * 1000);
     const diffHoursNy = Math.abs(Date.now() - nyStart.getTime()) / (3600 * 1000);
-    expect(diffHoursTokyo).toBeLessThanOrEqual(24);
-    expect(diffHoursNy).toBeLessThanOrEqual(24);
+    expect(diffHoursTokyo).toBeLessThanOrEqual(26);
+    expect(diffHoursNy).toBeLessThanOrEqual(26);
   });
 
   it('falls back safely to default on invalid timezone string', () => {

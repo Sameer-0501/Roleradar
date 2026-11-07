@@ -86,6 +86,8 @@ import {
   compareJobHandler,
 } from './profile.js';
 import { submitBetaFeedbackHandler } from './feedback.js';
+import { recordVitalsHandler, getVitalsSummaryHandler } from './telemetry.js';
+import { streamAIResponseHandler } from './stream.js';
 import { requireAuth, optionalAuth, requireInternalKey, requireAdmin } from '../auth/middleware.js';
 import { createAdminRouter } from './admin.js';
 import { scheduler } from '../scheduler/scheduler.js';
@@ -457,6 +459,28 @@ export function createRouter(): Router {
 
   // ── Admin Endpoints (Phase 16) ──────────────────────────────────────────
   router.use('/admin', requireAdmin, createAdminRouter());
+
+  // ── Performance Telemetry & Web Vitals (Item 30) ─────────────────────────
+  router.post('/telemetry/vitals', (req, res) => {
+    recordVitalsHandler(req, res);
+  });
+  router.get('/telemetry/vitals', (req, res) => {
+    getVitalsSummaryHandler(req, res);
+  });
+
+  // ── AI Token Streaming (Item 13 & Check 2) ──────────────────────────────
+  router.get('/prep/stream', (req, res) => {
+    void streamAIResponseHandler(req, res);
+  });
+  router.post('/prep/stream', (req, res) => {
+    void streamAIResponseHandler(req, res);
+  });
+  router.get('/assistant/stream', (req, res) => {
+    void streamAIResponseHandler(req, res);
+  });
+  router.post('/assistant/stream', (req, res) => {
+    void streamAIResponseHandler(req, res);
+  });
 
   return router;
 }

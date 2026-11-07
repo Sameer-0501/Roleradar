@@ -24,8 +24,13 @@ export async function healthHandler(_req: Request, res: Response): Promise<void>
     environment: config.nodeEnv,
     timestamp: new Date().toISOString(),
     database: dbResult.connected ? 'connected' : 'disconnected',
+    ...(dbResult.connected
+      ? {
+          db_latency_ms: dbResult.latencyMs,
+          pool_stats: dbResult.poolStats,
+        }
+      : { database_error: dbResult.error }),
     scheduler: schedulerState.status,
-    ...(dbResult.connected ? {} : { database_error: dbResult.error }),
   };
 
   res.status(isHealthy ? 200 : 503).json(body);

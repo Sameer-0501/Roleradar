@@ -1,8 +1,41 @@
 /**
  * KodNest Premium Build System — Base & Typography
+ * Performance optimized: Self-hosted / system font fallbacks with font-display: swap
+ * Strictly limited to 2 weights: 400 (regular) and 600 (semi-bold) to maximize render speed.
  */
 
-@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&display=swap');
+/* Modern system-first font definitions with font-display: swap */
+@font-face {
+  font-family: 'Source Sans 3';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Source Sans 3 Regular'), local('SourceSans3-Regular'), local('Segoe UI'), local('Roboto');
+}
+
+@font-face {
+  font-family: 'Source Sans 3';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: local('Source Sans 3 SemiBold'), local('SourceSans3-SemiBold'), local('Segoe UI Semibold'), local('Roboto Medium');
+}
+
+@font-face {
+  font-family: 'Source Serif 4';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Source Serif 4 Regular'), local('SourceSerif4-Regular'), local('Charter'), local('Georgia');
+}
+
+@font-face {
+  font-family: 'Source Serif 4';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: local('Source Serif 4 SemiBold'), local('SourceSerif4-SemiBold'), local('Charter Bold'), local('Georgia Bold');
+}
 
 *, *::before, *::after {
   box-sizing: border-box;
@@ -51,37 +84,45 @@ h1.kn-heading {
   font-size: var(--kn-heading-size-3);
   font-weight: var(--kn-heading-weight);
   line-height: var(--kn-heading-line-height);
+  letter-spacing: var(--kn-heading-letter-spacing);
   color: var(--kn-color-text);
+  margin: 0 0 var(--kn-space-1) 0;
+}
+
+.kn-heading-4 {
+  font-family: var(--kn-body-font);
+  font-size: 1.125rem;
+  font-weight: var(--kn-heading-weight);
+  line-height: 1.4;
+  color: var(--kn-color-text);
+  margin: 0 0 var(--kn-space-1) 0;
+}
+
+/* Paragraphs */
+p {
   margin: 0 0 var(--kn-space-2) 0;
 }
 
-/* Body text — max width for readability */
-.kn-body,
-.kn-text-block {
-  font-family: var(--kn-body-font);
-  font-size: var(--kn-body-size);
-  line-height: var(--kn-body-line-height);
-  color: var(--kn-color-text);
-  max-width: var(--kn-text-max-width);
+/* Links */
+a {
+  color: var(--kn-color-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: opacity 0.15s ease;
 }
 
-.kn-body-lg {
-  font-size: var(--kn-body-size-lg);
-  line-height: 1.7;
+a:hover {
+  opacity: 0.8;
 }
 
-.kn-subtext,
-.kn-context-subline {
-  font-size: var(--kn-body-size);
-  color: rgba(17, 17, 17, 0.6);
-  margin-top: var(--kn-space-1);
+/* Subtle / secondary text */
+.kn-text-subtle {
+  color: #666666;
+  font-size: 0.875rem;
 }
 
-/* Utility: no decorative fonts, consistent spacing */
-.kn-no-margin { margin: 0; }
-.kn-mb-1 { margin-bottom: var(--kn-space-1); }
-.kn-mb-2 { margin-bottom: var(--kn-space-2); }
-.kn-mb-3 { margin-bottom: var(--kn-space-3); }
-.kn-mb-4 { margin-bottom: var(--kn-space-4); }
-.kn-mt-2 { margin-top: var(--kn-space-2); }
-.kn-mt-3 { margin-top: var(--kn-space-3); }
+/* Monospace for code/tokens */
+code, kbd, samp {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.875em;
+}

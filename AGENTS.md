@@ -16,8 +16,8 @@ Whenever completing any task, implementation plan, walkthrough, competitive anal
    - Zero personal user emails, phone numbers, or candidate PII are included.
    - If code examples or env configurations are discussed, only use placeholder values (e.g., `your_api_key_here`, `postgres://user:***@localhost:5432/db`).
 
-3. **Provide Shareable / Redacted Versions Proactively**:
-   If an audit or technical report contains deep internal vulnerability notes that a user may not want to share with general customers or external parties, explicitly offer or provide a sanitized, external-ready summary.
+3. **Mandatory In-Depth External Shareable Reports on All Tasks**:
+   For every completed milestone, audit, or deliverable, always generate a dedicated `[PUBLIC / EXTERNAL SHAREABLE]` deliverable alongside any internal due diligence notes. The external shareable report must be **extensively detailed, exhaustive, enterprise-grade, and comprehensive** (never brief summaries or abridged notes), containing complete tabular matrices, sector breakdowns, architectural case studies, and verification proofs, while containing ZERO personal credentials, ZERO personal emails, ZERO API keys/secrets, and ZERO candidate PII, suitable for external partners, investors, or public distribution.
 
 ## 2. Report Storage Policy — Artifact Directory Only
 
