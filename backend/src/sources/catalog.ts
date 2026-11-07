@@ -2023,6 +2023,45 @@ export const SOURCE_CATALOG: SourceDefinition[] = [
       clientSite: 'Teleperformance',
     },
   },
+  {
+    companyName: 'Salesforce',
+    officialDomain: 'salesforce.wd12.myworkdayjobs.com',
+    careersUrl: 'https://salesforce.wd12.myworkdayjobs.com/External_Career_Site',
+    atsType: 'WORKDAY',
+    isActive: true,
+    scanIntervalMinutes: 30,
+    config: {
+      host: 'salesforce.wd12.myworkdayjobs.com',
+      tenant: 'salesforce',
+      clientSite: 'External_Career_Site',
+    },
+  },
+  {
+    companyName: 'Workday',
+    officialDomain: 'workday.wd5.myworkdayjobs.com',
+    careersUrl: 'https://workday.wd5.myworkdayjobs.com/Workday',
+    atsType: 'WORKDAY',
+    isActive: true,
+    scanIntervalMinutes: 30,
+    config: {
+      host: 'workday.wd5.myworkdayjobs.com',
+      tenant: 'workday',
+      clientSite: 'Workday',
+    },
+  },
+  {
+    companyName: 'Teladoc Health',
+    officialDomain: 'teladoc.wd503.myworkdayjobs.com',
+    careersUrl: 'https://teladoc.wd503.myworkdayjobs.com/teladochealth_is_hiring',
+    atsType: 'WORKDAY',
+    isActive: true,
+    scanIntervalMinutes: 30,
+    config: {
+      host: 'teladoc.wd503.myworkdayjobs.com',
+      tenant: 'teladoc',
+      clientSite: 'teladochealth_is_hiring',
+    },
+  },
 ];
 
 export const catalog = SOURCE_CATALOG;
