@@ -220,9 +220,6 @@ reported as done, the worktree is discarded, and the change is gone.
 ## Repository Structure
 
 ```
-PROJECT_RULES.md          # ← This file (canonical rules)
-GSD-STYLE.md              # Style and conventions
-
 .agent/
 └── workflows/            # Slash commands (/plan, /execute, etc.)
 
@@ -239,7 +236,10 @@ GSD-STYLE.md              # Style and conventions
 └── examples/             # Usage examples
 
 adapters/                 # Optional model-specific enhancements
-docs/                     # Operational documentation
+docs/                     # Operational documentation, canonical rules, standards & audit reports
+├── PROJECT_RULES.md      # Canonical rules
+├── GSD-STYLE.md          # Style and conventions
+├── ENGINEERING_STANDARDS.md # Engineering gates and lifecycle definitions
 scripts/                  # Utility scripts
 ```
 

@@ -1,7 +1,7 @@
 # Gemini Adapter
 
 > **Everything in this file is optional.**
-> For canonical rules, see [PROJECT_RULES.md](../PROJECT_RULES.md).
+> For canonical rules, see [PROJECT_RULES.md](../docs/PROJECT_RULES.md).
 
 This adapter provides optional enhancements for Gemini models in Antigravity.
 
