@@ -34,12 +34,18 @@ import type {
   SapSourceConfig,
 } from '../collectors/types.js';
 
+export interface AlternateDomainRule {
+  domain: string;
+  allowedPathPatterns: RegExp[];
+}
+
 export interface BaseSourceDefinition {
   companyName: string;
   officialDomain: string;
   careersUrl: string;
   isActive: boolean;
   scanIntervalMinutes: number;
+  allowedAlternateDomains?: AlternateDomainRule[];
 }
 
 export interface GreenhouseSourceDefinition extends BaseSourceDefinition {
@@ -1285,6 +1291,26 @@ export const SOURCE_CATALOG: SourceDefinition[] = [
       tenant: 'adobe',
       clientSite: 'external_experienced',
     },
+    allowedAlternateDomains: [
+      {
+        domain: 'careers.adobe.com',
+        allowedPathPatterns: [
+          /^\/(?:[a-z]{2}\/)?(?:us\/en|en|in)\/job\/R[0-9]{5,12}(?:\/[a-zA-Z0-9_\-]+)?\/?$/i,
+        ],
+      },
+      {
+        domain: 'www.adobe.com',
+        allowedPathPatterns: [
+          /^\/(?:[a-z]{2}\/)?careers\/(?:job|requisition)\/R[0-9]{5,12}(?:\/[a-zA-Z0-9_\-]+)?\/?$/i,
+        ],
+      },
+      {
+        domain: 'adobe.com',
+        allowedPathPatterns: [
+          /^\/(?:[a-z]{2}\/)?careers\/(?:job|requisition)\/R[0-9]{5,12}(?:\/[a-zA-Z0-9_\-]+)?\/?$/i,
+        ],
+      },
+    ],
   },
   {
     companyName: 'Target',
@@ -1841,7 +1867,85 @@ export const SOURCE_CATALOG: SourceDefinition[] = [
       clientSite: 'Omnissa_External_Career_Site',
     },
   },
+  {
+    companyName: 'Haleon',
+    officialDomain: 'gsknch.wd3.myworkdayjobs.com',
+    careersUrl: 'https://gsknch.wd3.myworkdayjobs.com/GSKCareers',
+    atsType: 'WORKDAY',
+    isActive: true,
+    scanIntervalMinutes: 30,
+    config: {
+      host: 'gsknch.wd3.myworkdayjobs.com',
+      tenant: 'gsknch',
+      clientSite: 'GSKCareers',
+    },
+  },
+  {
+    companyName: 'Nasdaq',
+    officialDomain: 'nasdaq.wd1.myworkdayjobs.com',
+    careersUrl: 'https://nasdaq.wd1.myworkdayjobs.com/Global_External_Site',
+    atsType: 'WORKDAY',
+    isActive: true,
+    scanIntervalMinutes: 30,
+    config: {
+      host: 'nasdaq.wd1.myworkdayjobs.com',
+      tenant: 'nasdaq',
+      clientSite: 'Global_External_Site',
+    },
+  },
+  {
+    companyName: 'TransUnion',
+    officialDomain: 'transunion.wd5.myworkdayjobs.com',
+    careersUrl: 'https://transunion.wd5.myworkdayjobs.com/TransUnion',
+    atsType: 'WORKDAY',
+    isActive: true,
+    scanIntervalMinutes: 30,
+    config: {
+      host: 'transunion.wd5.myworkdayjobs.com',
+      tenant: 'transunion',
+      clientSite: 'TransUnion',
+    },
+  },
+  {
+    companyName: 'Broadridge',
+    officialDomain: 'broadridge.wd5.myworkdayjobs.com',
+    careersUrl: 'https://broadridge.wd5.myworkdayjobs.com/Careers',
+    atsType: 'WORKDAY',
+    isActive: true,
+    scanIntervalMinutes: 30,
+    config: {
+      host: 'broadridge.wd5.myworkdayjobs.com',
+      tenant: 'broadridge',
+      clientSite: 'Careers',
+    },
+  },
+  {
+    companyName: 'U.S. Bank',
+    officialDomain: 'usbank.wd1.myworkdayjobs.com',
+    careersUrl: 'https://usbank.wd1.myworkdayjobs.com/US_Bank_Careers',
+    atsType: 'WORKDAY',
+    isActive: true,
+    scanIntervalMinutes: 30,
+    config: {
+      host: 'usbank.wd1.myworkdayjobs.com',
+      tenant: 'usbank',
+      clientSite: 'US_Bank_Careers',
+    },
+  },
+  {
+    companyName: 'Pfizer',
+    officialDomain: 'pfizer.wd1.myworkdayjobs.com',
+    careersUrl: 'https://pfizer.wd1.myworkdayjobs.com/PfizerCareers',
+    atsType: 'WORKDAY',
+    isActive: true,
+    scanIntervalMinutes: 30,
+    config: {
+      host: 'pfizer.wd1.myworkdayjobs.com',
+      tenant: 'pfizer',
+      clientSite: 'PfizerCareers',
+    },
+  },
 ];
 
-
+export const catalog = SOURCE_CATALOG;
 
