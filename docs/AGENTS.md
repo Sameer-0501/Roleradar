@@ -30,4 +30,16 @@ Whenever completing any task, implementation plan, walkthrough, competitive anal
 1. **Never execute `git push` without explicit user permission.**
 2. All commits and staged changes must remain in the local Git repository until the user explicitly directs or authorizes a push to the remote repository (`origin`).
 
+## 4. Mandatory Pre-Execution Blueprint & Strategy Alignment Check
+
+For every prompt and task received in Antigravity, **BEFORE** beginning any implementation:
+1. **Cross-Reference Authoritative Documents:**
+   - `docs/RR_PRODUCT_MASTER_BLUEPRINT.md` (Document ID: `RR-PRODUCT-MASTER-BLUEPRINT-001`)
+   - `docs/PRODUCT_STRATEGY_AND_FEATURE_ROADMAP.md` (Document ID: `RR-DOC-2026-PROD-V1`)
+2. **Alignment Verification:**
+   - Verify whether the requested prompt/feature directly aligns with the 5 core connected engines, 7 prioritized releases, and strict non-goals defined in the blueprint.
+3. **Execution Protocol:**
+   - **If Aligned:** Confirm alignment and proceed with implementation according to the technical acceptance gates and engineering standards.
+   - **If Deviating / Mismatched:** Do not implement off-roadmap or conflicting code. Adapt the requested work so it strictly conforms to the blueprint and strategy, explicitly highlighting the adaptation and rationale before proceeding.
+
 

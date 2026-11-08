@@ -1476,3 +1476,4 @@ An outcome should be recorded only when supported by evidence.
 This connected information model is the foundation of RoleRadar's long-term differentiation.
 
 **The objective is not to build the largest collection of AI career tools. The objective is to build a trustworthy system that helps people make better career decisions and become better prepared for real opportunities.**
+
