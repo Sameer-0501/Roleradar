@@ -17,13 +17,13 @@ All prior informal status logs, speculative markdown claims, and interim scratch
 
 ## 2. Current Phase and Roadmap Position
 
-* **Current Active Phase:** **Product Release 1B — Part A (Engine 2: Proof-Based Job Fit Backend Core)** — `COMPLETED`.
+* **Current Active Phase:** **Product Release 1B (Engine 2: Proof-Based Job Fit Backend & Frontend UI)** — `COMPLETED`.
 * **Prior Source Expansion:** **Phase 20.5 (Controlled Workday Source Expansion)** — Formally `PAUSED` after Batch 8 admission.
-* **Next Approved Milestone:** **Product Release 1B — Part B (P0 — Engine 2: Proof-Based Job Fit Frontend UI & E2E Integration)** — Awaiting explicit user approval before execution.
+* **Next Approved Milestone:** **Product Release 2 (P1 — Engine 3: Master Career Evidence Profile & Claim Provenance)** — Awaiting explicit user approval before execution.
 
 ```
-[Phase 20.5 Workday Expansion Batches 1-8] ──► [Section 19 Reconciliation] ──► [Release 1A: Trust Passport] ──► [Release 1B Part A: Fit Backend] ──► [Release 1B Part B: Fit Frontend UI]
-              (COMPLETED & PAUSED)                           (COMPLETED)                     (COMPLETED)                       (COMPLETED)                           (NEXT APPROVED TASK)
+[Phase 20.5 Expansion] ──► [Section 19 Reconciliation] ──► [Release 1A: Trust Passport] ──► [Release 1B: Proof-Based Job Fit] ──► [Release 2: Evidence Profile]
+  (COMPLETED & PAUSED)              (COMPLETED)                     (COMPLETED)                            (COMPLETED)                   (NEXT APPROVED TASK)
 ```
 
 ---
@@ -34,6 +34,8 @@ Every commit on `main` has been forensically verified via `git log`, `git show -
 
 | Commit Hash | Commit Title | Affected Core Files | Maturity Classification | Evidence & Status |
 | :--- | :--- | :--- | :--- | :--- |
+| `e71a63d` | `feat(ui): implement Engine 2 Proof-Based Job Fit drawer and candidate controls` | `JobFitDrawer.ts`, `job-fit.css`, `jobs.service.ts`, `types.ts`, `DashboardView.ts`, `VerifiedJobsView.ts`, `JobDetailModal.ts` | `PRODUCTION-READY` | WAI-ARIA accessible Job Fit Inspector drawer, requirement group breakdowns, evidence tags, learnable skill gap cards, inline candidate dispute forms, and job card button integration. |
+| `d56165a` | `docs(handoff): record Engine 2 Part A verified commit 12096b5` | `ROLERADAR_MASTER_HANDOFF.md` | `PRODUCTION-READY` | Verified Engine 2 Part A ground truth commit recorded in handoff. |
 | `12096b5` | `feat(matching): implement Engine 2 Proof-Based Job Fit backend core and candidate controls` | `proof-based-fit-service.ts`, `jobs.ts`, `router.ts`, `schema.ts`, `0017_proof_based_fit_controls.sql`, `proof-based-job-fit.test.ts` | `PRODUCTION-READY` | 6-state evaluation vocabulary, requirement atomization, candidate disputes/clarifications, 13/13 passing tests. |
 | `a73328a` | `docs(handoff): record Engine 1 verified commit efecb09` | `ROLERADAR_MASTER_HANDOFF.md` | `PRODUCTION-READY` | Verified Engine 1 ground truth commit recorded in handoff. |
 | `efecb09` | `feat(trust): implement Engine 1 Opportunity Trust Passport and forensic inspector` | `trust-passport-service.ts`, `jobs.ts`, `router.ts`, `matching-*`, `TrustPassportDrawer.ts`, `trust-passport.css`, views | `PRODUCTION-READY` | Deterministic 6-dimension Trust Passport service, 6 transparent statuses, API projections, and frontend inspector. |
@@ -142,13 +144,13 @@ All verification suites executed on November 9, 2026 passed with **0 errors**:
 
 ### 6.4 Frontend Production Build
 * **Command:** `npm --prefix frontend run build`
-* **Result:** **Exit code 0**, 2,440 modules transformed, built in 41.32s.
+* **Result:** **Exit code 0**, 2,442 modules transformed, built in 8.17s.
 * **Output Assets:**
   * `dist/index.html`: 4.03 kB (gzip: 1.51 kB)
-  * `dist/assets/index-DZjpizi0.css`: 162.94 kB (gzip: 28.87 kB)
+  * `dist/assets/index-D0gzp5ea.css`: 171.23 kB (gzip: 30.11 kB)
   * `dist/assets/vendor-react-BhCj5pxB.js`: 217.34 kB (gzip: 69.89 kB)
   * `dist/assets/vendor-charts-Cp1LghQS.js`: 317.59 kB (gzip: 95.18 kB)
-  * `dist/assets/index-BKwfR9G2.js`: 340.85 kB (gzip: 86.60 kB)
+  * `dist/assets/index-BrY6jLou.js`: 356.62 kB (gzip: 90.37 kB)
 
 ### 6.5 Opportunity Trust Passport Engine 1 Suite
 * **Command:** `Set-Location backend; npx vitest run src/tests/opportunity-trust-passport.test.ts`
@@ -200,8 +202,7 @@ Every future phase, feature, or adapter must strictly comply with `docs/ENGINEER
    * *Future Pipeline:* Batch 9+ candidate discovery (Workday, SmartRecruiters, SAP, Taleo) queued for future phases. 64 Workday sources provide sufficient scale for Product Releases 1–7.
 2. **Product Roadmap Execution Queue:**
    * **Product Release 1A:** Opportunity Trust Passport (Engine 1) — `COMPLETED`.
-   * **Product Release 1B (Part A):** Proof-Based Job Fit Backend Core (Engine 2) — `COMPLETED`.
-   * **Product Release 1B (Part B):** Proof-Based Job Fit Frontend UI & E2E Integration (Engine 2).
+   * **Product Release 1B:** Proof-Based Job Fit Backend & Frontend UI (Engine 2) — `COMPLETED`.
    * **Product Release 2:** Master Career Evidence Profile & Claim Provenance (Engine 3).
    * **Product Release 3:** Targeted Resume Studio & Role Relevance Auditing (Engine 3).
    * **Product Release 4:** Adaptive Skill Diagnostic & Fresher Project Readiness (Engine 4).
@@ -217,24 +218,23 @@ Every future phase, feature, or adapter must strictly comply with `docs/ENGINEER
 
 ## 10. Single Next Approved Task
 
-### **Task: Product Release 1B — Part B (P0 — Engine 2: Proof-Based Job Fit Frontend UI & E2E Integration)**
+### **Task: Product Release 2 (P1 — Engine 3: Master Career Evidence Profile & Claim Provenance)**
 
 **Core Objective:**  
-Implement the frontend user interface and end-to-end integration for Engine 2 (**Proof-Based Job Fit / RoleRadar Job Fit Intelligence**) in strict compliance with `ROLERADAR_PRODUCT_MASTER_BLUEPRINT.md` (Section 5) and `docs/ENGINEERING_STANDARDS.md`.
+Implement the foundation of Engine 3 (**Career Evidence Profile & Resume Studio 2.0**) as defined in Section 6 and Section 14 of `ROLERADAR_PRODUCT_MASTER_BLUEPRINT.md`. Build the verified Master Career Evidence Profile data layer and API, transitioning the candidate profile from a passive flat text resume into an immutable, verifiable, claim-by-claim structured repository of career proof.
 
-**Scope of Implementation (Release 1B — Part B):**
-1. **Frontend Fit API Client:** Add `getProofFit(jobId)` and `updateProofFitControls(jobId, controls)` to `frontend/src/services/api/jobs.service.ts` with full TypeScript type definitions matching the backend contract.
-2. **Proof-Based Job Fit Inspector Drawer (`frontend/src/components/ProofFitDrawer.ts`):**
-   - Accessible slide-over drawer displaying overall eligibility banner (`ELIGIBLE`, `ELIGIBILITY_CONCERN_DETECTED`, `NEEDS_PROFILE_COMPLETION`).
-   - Grouped cards for Mandatory Requirements, Preferred Qualifications, Responsibilities, and Employment Conditions.
-   - Requirement evidence chips displaying concrete proof source (`PROJECT`, `EXPERIENCE`, `EDUCATION`, `CERTIFICATION`, `PROFILE_SKILL`).
-   - Hard Eligibility Concern callouts and Learnable Skill Gap resolution action recommendations.
-   - Candidate Agency controls allowing inline requirement disputes and missing context clarifications.
-3. **Dashboard & Verified Jobs Job Card Indicators:**
-   - Add eligibility pill and fit summary chips to job cards alongside the Trust Passport strip.
-   - Wire "🎯 Job Fit" button to trigger the Proof-Based Job Fit drawer.
-4. **Verification & Acceptance:** Vite production build exit 0, Vitest regression suite 85/85 passing, and sanitized report in Antigravity Brains.
+**Scope of Implementation (Product Release 2):**
+1. **Master Evidence Schema & Storage:**
+   - Define schema for atomic evidence units: Work Experience, Production Projects, Education, Direct Git Artifacts, and Certifications.
+   - Enforce claim provenance: each claim carries explicit evidence links (live URL, repo, verified credential, or documented achievement).
+2. **Backend Evidence Profile API:**
+   - CRUD endpoints for candidate profile evidence units with type validation and claim atomization.
+   - Evidence grounding verification services for cross-referencing Engine 2 requirement matching.
+3. **Frontend Evidence Profile Management:**
+   - Interactive profile evidence workbench allowing candidates to manage, verify, and categorize their career proof points.
+4. **Verification & Acceptance:**
+   - Full Vitest suite passing, strict TypeScript type check exit 0, and Vite production build clean.
 
 > [!IMPORTANT]
 > **Execution Gate:**  
-> This task is currently **AWAITING USER AUTHORIZATION**. Do not begin implementation of Product Release 1B Part B until the user reviews this handoff and gives explicit approval to proceed.
+> This task is currently **AWAITING USER AUTHORIZATION**. Do not begin implementation of Product Release 2 until the user reviews this handoff and gives explicit approval to proceed.
