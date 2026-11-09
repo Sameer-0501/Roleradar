@@ -126,12 +126,12 @@ export async function uploadResumeHandler(req: Request, res: Response): Promise<
       return;
     }
 
-    const effectiveMime = mimeType || (filename.endsWith('.pdf') ? 'application/pdf' : 'text/plain');
+    const effectiveMime = mimeType || (filename.endsWith('.pdf') ? 'application/pdf' : filename.endsWith('.docx') ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'text/plain');
     const result = await uploadAndParseResume(userId, filename, fileBuffer, effectiveMime);
 
     res.status(201).json(result);
   } catch (err: any) {
-    const msg = err?.message || '';
+    const msg = err?.message || 'Failed to upload and parse resume';
     const isValidationError =
       msg.includes('Unsupported file format') ||
       msg.includes('File size exceeds') ||
@@ -144,7 +144,7 @@ export async function uploadResumeHandler(req: Request, res: Response): Promise<
       msg.includes('null bytes detected');
 
     res.status(isValidationError ? 400 : 500).json({
-      error: isValidationError ? msg : 'Failed to upload and parse resume',
+      error: msg,
       details: msg,
     });
   }

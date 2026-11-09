@@ -122,11 +122,13 @@ export function mountCandidateProfileView(options: CandidateProfileViewOptions):
         reader.onload = async () => {
           if (isDestroyed) return;
           try {
-            const content = reader.result;
+            const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+            const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : '';
+
             await profileService.uploadResume({
               filename: file.name,
-              content: typeof content === 'string' ? content : '',
-              mimeType: file.type || 'text/plain',
+              base64,
+              mimeType: file.type || 'application/octet-stream',
             });
             if (isDestroyed) return;
 
@@ -137,10 +139,14 @@ export function mountCandidateProfileView(options: CandidateProfileViewOptions):
             showToast(err?.message || 'Failed to upload resume', 'error');
             browseBtn.disabled = false;
             browseBtn.textContent = '📤 Upload Resume (.pdf, .docx, .txt)';
+          } finally {
+            if (fileInput) {
+              fileInput.value = '';
+            }
           }
         };
 
-        reader.readAsText(file);
+        reader.readAsDataURL(file);
       });
     }
 

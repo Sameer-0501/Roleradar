@@ -611,3 +611,4 @@ function bindCandidateControls(
     });
   });
 }
+

@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getDb, closeConnection } from '../database/connection.js';
 import { schema } from '../database/index.js';
+import { eq } from 'drizzle-orm';
 import {
   getCandidateProfile,
   uploadAndParseResume,
@@ -16,6 +17,18 @@ describe('Phase 13: Candidate Profile Service & User Isolation', () => {
 
   beforeAll(async () => {
     const db = getDb();
+    // Clean up any residual test profile/resume rows for isolation
+    await db.delete(schema.resumes).where(eq(schema.resumes.user_id, userA));
+    await db.delete(schema.resumes).where(eq(schema.resumes.user_id, userB));
+    await db.delete(schema.candidateProfiles).where(eq(schema.candidateProfiles.user_id, userA));
+    await db.delete(schema.candidateProfiles).where(eq(schema.candidateProfiles.user_id, userB));
+    await db.delete(schema.candidateSkills).where(eq(schema.candidateSkills.user_id, userA));
+    await db.delete(schema.candidateSkills).where(eq(schema.candidateSkills.user_id, userB));
+    await db.delete(schema.candidateEducations).where(eq(schema.candidateEducations.user_id, userA));
+    await db.delete(schema.candidateEducations).where(eq(schema.candidateEducations.user_id, userB));
+    await db.delete(schema.candidateProjects).where(eq(schema.candidateProjects.user_id, userA));
+    await db.delete(schema.candidateProjects).where(eq(schema.candidateProjects.user_id, userB));
+
     await db
       .insert(schema.users)
       .values([

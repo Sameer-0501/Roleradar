@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateResumeFile } from '../resume/profile-service.js';
+import { validateResumeFile, extractResumeText } from '../resume/profile-service.js';
 
 describe('Resume Upload Security Validation', () => {
   const validPdfBuffer = Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF');
@@ -118,5 +118,32 @@ describe('Resume Upload Security Validation', () => {
     expect(() => validateResumeFile('exploit\0.pdf', validPdfBuffer)).toThrow(
       /null bytes detected/
     );
+  });
+
+  it('extractResumeText strips null bytes and preserves text for PostgreSQL safety', () => {
+    const dirtyBuffer = Buffer.from('John Doe\0Senior Engineer\0Skills: Python, TypeScript');
+    const clean = extractResumeText(dirtyBuffer, '.txt');
+    expect(clean).not.toContain('\0');
+    expect(clean).toContain('John Doe');
+    expect(clean).toContain('Senior Engineer');
+    expect(clean).toContain('Skills: Python, TypeScript');
+  });
+
+  it('extractResumeText extracts text from PDF stream operators', () => {
+    const pdfStream = Buffer.from(
+      '%PDF-1.4\n' +
+      '1 0 obj\n' +
+      '<< /Length 45 >>\n' +
+      'stream\n' +
+      'BT /F1 12 Tf (Jane Candidate) Tj 10 10 Td [(React) -10 (Node.js)] TJ ET\n' +
+      'endstream\n' +
+      'endobj\n' +
+      '%%EOF'
+    );
+    const text = extractResumeText(pdfStream, '.pdf');
+    expect(text).toContain('Jane Candidate');
+    expect(text).toContain('React');
+    expect(text).toContain('Node.js');
+    expect(text).not.toContain('\0');
   });
 });

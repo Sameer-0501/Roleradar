@@ -12,6 +12,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { eq, and, desc } from 'drizzle-orm';
 import { getDb } from '../database/connection.js';
 import { schema } from '../database/index.js';
@@ -359,6 +360,109 @@ export function validateResumeFile(
 }
 
 /**
+ * Safely extracts human-readable text from PDF, DOCX, or TXT file buffers.
+ * Sanitizes output to remove null bytes (\0) and control characters for PostgreSQL safety.
+ */
+export function extractResumeText(fileBuffer: Buffer, fileExt: string): string {
+  let extracted = '';
+
+  if (fileExt === '.pdf') {
+    // 1. PDF stream decompression and text operator extraction
+    try {
+      const rawString = fileBuffer.toString('binary');
+      const streamRegex = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
+      let match: RegExpExecArray | null;
+
+      while ((match = streamRegex.exec(rawString)) !== null) {
+        const rawStream = Buffer.from(match[1]!, 'binary');
+        let decompressed: Buffer;
+        try {
+          decompressed = zlib.inflateSync(rawStream);
+        } catch {
+          try {
+            decompressed = zlib.inflateRawSync(rawStream);
+          } catch {
+            decompressed = rawStream;
+          }
+        }
+
+        const streamStr = decompressed.toString('utf-8');
+        // Extract text from (Text) Tj operators
+        const tjRegex = /\(([^)]+)\)\s*Tj/g;
+        let tjMatch: RegExpExecArray | null;
+        while ((tjMatch = tjRegex.exec(streamStr)) !== null) {
+          extracted += tjMatch[1] + ' ';
+        }
+
+        // Extract text from [(Text) -10 (More)] TJ array operators
+        const tjArrayRegex = /\[([^\]]+)\]\s*TJ/g;
+        let arrMatch: RegExpExecArray | null;
+        while ((arrMatch = tjArrayRegex.exec(streamStr)) !== null) {
+          extracted += arrMatch[1]!.replace(/\(([^)]+)\)/g, ' $1 ') + ' ';
+        }
+      }
+    } catch {
+      // Graceful fallback
+    }
+
+    // Fallback: If compressed stream extraction yielded minimal text, grab visible ASCII text tokens
+    if (extracted.trim().length < 50) {
+      const asciiTokens = fileBuffer
+        .toString('latin1')
+        .replace(/[^\x20-\x7E\r\n\t]/g, ' ')
+        .replace(/\s+/g, ' ');
+      extracted += ' ' + asciiTokens;
+    }
+  } else if (fileExt === '.docx') {
+    // 2. DOCX (ZIP archive) extraction of word/document.xml
+    try {
+      let offset = 0;
+      while (offset < fileBuffer.length - 30) {
+        if (
+          fileBuffer[offset] === 0x50 &&
+          fileBuffer[offset + 1] === 0x4b &&
+          fileBuffer[offset + 2] === 0x03 &&
+          fileBuffer[offset + 3] === 0x04
+        ) {
+          const compressionMethod = fileBuffer.readUInt16LE(offset + 8);
+          const compressedSize = fileBuffer.readUInt32LE(offset + 18);
+          const fileNameLen = fileBuffer.readUInt16LE(offset + 26);
+          const extraFieldLen = fileBuffer.readUInt16LE(offset + 28);
+          const fileName = fileBuffer.toString('utf-8', offset + 30, offset + 30 + fileNameLen);
+          const dataStart = offset + 30 + fileNameLen + extraFieldLen;
+
+          if (fileName === 'word/document.xml') {
+            const compressedData = fileBuffer.subarray(dataStart, dataStart + compressedSize);
+            const xmlData =
+              compressionMethod === 8
+                ? zlib.inflateRawSync(compressedData).toString('utf-8')
+                : compressedData.toString('utf-8');
+
+            const textMatches = xmlData.match(/<w:t[^>]*>([^<]+)<\/w:t>/g) || [];
+            extracted = textMatches.map((m) => m.replace(/<[^>]+>/g, '')).join(' ');
+            break;
+          }
+          offset = dataStart + compressedSize;
+        } else {
+          offset++;
+        }
+      }
+    } catch {
+      // Graceful fallback
+    }
+  } else {
+    // 3. Plain text / Markdown
+    extracted = fileBuffer.toString('utf-8');
+  }
+
+  // Strip null bytes and non-printable control characters while strictly preserving newlines (\r, \n) and tabs (\t)
+  return extracted
+    .replace(/\0/g, '')
+    .replace(/[\x01-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    .trim();
+}
+
+/**
  * Upload and parse a resume file for a user.
  */
 export async function uploadAndParseResume(
@@ -384,8 +488,8 @@ export async function uploadAndParseResume(
   // Write file to private storage
   fs.writeFileSync(storagePath, fileBuffer);
 
-  // Extract raw text (plain text conversion or buffer decoding)
-  const rawText = fileBuffer.toString('utf-8');
+  // Extract raw text with format-specific extractor and null-byte sanitization
+  const rawText = extractResumeText(fileBuffer, validated.safeExt);
   const parsedData = parseResumeText(rawText);
 
   // Mark all previous resumes as inactive
@@ -394,7 +498,7 @@ export async function uploadAndParseResume(
     .set({ is_active: false, updated_at: new Date() })
     .where(eq(schema.resumes.user_id, userId));
 
-  // Insert new active resume record
+  // Insert new active resume record (guaranteed 0 null bytes)
   const [newResume] = await db
     .insert(schema.resumes)
     .values({
@@ -404,7 +508,7 @@ export async function uploadAndParseResume(
       file_size: fileBuffer.length,
       mime_type: validated.canonicalMime,
       storage_path: storagePath,
-      parsed_text: rawText.slice(0, 10000), // bounded preview
+      parsed_text: rawText.slice(0, 10000), // bounded preview without null bytes
       is_active: true,
     })
     .returning();
