@@ -17,13 +17,13 @@ All prior informal status logs, speculative markdown claims, and interim scratch
 
 ## 2. Current Phase and Roadmap Position
 
-* **Current Active Phase:** **Product Release 1B (Engine 2: Proof-Based Job Fit Backend & Frontend UI)** — `COMPLETED`.
+* **Current Active Phase:** **Product Release 2 (Engine 3: Master Career Evidence Profile & Resume Studio 2.0)** — `COMPLETED`.
 * **Prior Source Expansion:** **Phase 20.5 (Controlled Workday Source Expansion)** — Formally `PAUSED` after Batch 8 admission.
-* **Next Approved Milestone:** **Product Release 2 (P1 — Engine 3: Master Career Evidence Profile & Claim Provenance)** — Awaiting explicit user approval before execution.
+* **Next Approved Milestone:** **Product Release 3 (P1 — Engine 4: Adaptive Career Readiness & Interview Studio)** — Awaiting explicit user approval before execution.
 
 ```
-[Phase 20.5 Expansion] ──► [Section 19 Reconciliation] ──► [Release 1A: Trust Passport] ──► [Release 1B: Proof-Based Job Fit] ──► [Release 2: Evidence Profile]
-  (COMPLETED & PAUSED)              (COMPLETED)                     (COMPLETED)                            (COMPLETED)                   (NEXT APPROVED TASK)
+[Phase 20.5 Expansion] ──► [Section 19 Reconciliation] ──► [Release 1A: Trust Passport] ──► [Release 1B: Proof-Based Fit] ──► [Release 2: Evidence & Studio] ──► [Release 3: Readiness & Interview]
+  (COMPLETED & PAUSED)              (COMPLETED)                     (COMPLETED)                     (COMPLETED)                       (COMPLETED)                     (NEXT APPROVED TASK)
 ```
 
 ---
@@ -34,6 +34,7 @@ Every commit on `main` has been forensically verified via `git log`, `git show -
 
 | Commit Hash | Commit Title | Affected Core Files | Maturity Classification | Evidence & Status |
 | :--- | :--- | :--- | :--- | :--- |
+| `5f442ac` | `feat(resume): implement Engine 3 Master Career Evidence Profile and Resume Studio 2.0` | `0018_career_evidence_and_resumes.sql`, `career-evidence-service.ts`, `resume-tailoring-service.ts`, `ats-parser-simulator.ts`, `resumes.ts`, `router.ts`, `resumes.service.ts`, `ResumeStudioView.ts`, `resume-studio.css`, `CandidateProfileView.ts`, tests | `PRODUCTION-READY` | Master Career Evidence Vault, bidirectional claim sync, candidate controls (skills/projects/experience), truth-preserving tailoring with claim provenance (PROVENANCE_BACKED vs UNLINKED), local 3-dimension ATS simulator, 23/23 tests passing, 127/127 regression suite passing. |
 | `a4a5676` | `fix(resume): resolve resume upload failures across all file types (.pdf, .docx, .txt)` | `profile-service.ts`, `CandidateProfileView.ts`, `index.ts`, `profile.ts`, tests | `PRODUCTION-READY` | Resolved PostgreSQL null-byte 22021 error, 10MB payload limit, base64 binary streaming, stream text extraction, 104/104 passing tests. |
 | `e71a63d` | `feat(ui): implement Engine 2 Proof-Based Job Fit drawer and candidate controls` | `JobFitDrawer.ts`, `job-fit.css`, `jobs.service.ts`, `types.ts`, `DashboardView.ts`, `VerifiedJobsView.ts`, `JobDetailModal.ts` | `PRODUCTION-READY` | WAI-ARIA accessible Job Fit Inspector drawer, requirement group breakdowns, evidence tags, learnable skill gap cards, inline candidate dispute forms, and job card button integration. |
 | `d56165a` | `docs(handoff): record Engine 2 Part A verified commit 12096b5` | `ROLERADAR_MASTER_HANDOFF.md` | `PRODUCTION-READY` | Verified Engine 2 Part A ground truth commit recorded in handoff. |
@@ -165,6 +166,12 @@ All verification suites executed on November 9, 2026 passed with **0 errors**:
 * **Execution Duration:** 2.89s
 * **Coverage:** Structured requirement extraction (mandatory vs preferred vs responsibilities vs conditions), 6-state evaluation vocabulary (`SUPPORTED`, `PARTIALLY_SUPPORTED`, `NOT_SUPPORTED`, `UNKNOWN`, `HARD_ELIGIBILITY_CONCERN`, `NOT_APPLICABLE`), Indian Fresher profile matching vs Senior 5+ year blocker, Experienced profile evidence grounding (`EXPERIENCE`, `PROJECT`, `EDUCATION`), International location mismatch boundary enforcement, empty profile non-rejection (`UNKNOWN` action prompts), candidate controls persistence (`fit_controls` JSONB on `user_job_interactions`), strict user isolation, and synthetic teardown.
 
+### 6.7 Career Evidence Profile & Resume Studio 2.0 Engine 3 Suite
+* **Command:** `Set-Location backend; npx vitest run src/tests/career-evidence-resume.test.ts src/tests/proof-based-job-fit.test.ts src/tests/opportunity-trust-passport.test.ts src/tests/digest-concurrency-integration.test.ts src/tests/url-validator.test.ts src/tests/adobe-dual-domain-provenance.test.ts src/tests/apply-action-semantics.test.ts src/tests/resume-upload-validation.test.ts src/tests/profile-api.test.ts`
+* **Result:** **9 test files passed (9/9), 127 tests passed (127/127)**
+* **Execution Duration:** 3.27s
+* **Coverage:** Master Career Evidence Vault CRUD with immutable status tags (`SELF_REPORTED`, `DOCUMENT_SUPPORTED`, `PROJECT_SUPPORTED`, `ASSESSMENT_SUPPORTED`, `EXTERNALLY_VERIFIED`), bidirectional claim synchronization, candidate direct controls (skills, projects, experiences with automatic evidence creation and cascading deletion), truth-preserving resume tailoring with bullet-to-evidence claim provenance (`PROVENANCE_BACKED` vs `UNLINKED`), zero fact invention verification, truthfulness score calculation, multi-variant resume isolation without data duplication, local 3-dimension ATS parser simulator (Parsing Quality, Role Relevance, Evidence Integrity), REST API endpoints contract verification, and non-destructive synthetic teardown.
+
 ---
 
 ## 7. Non-Negotiable Engineering Standards & Architectural Invariants
@@ -204,12 +211,11 @@ Every future phase, feature, or adapter must strictly comply with `docs/ENGINEER
 2. **Product Roadmap Execution Queue:**
    * **Product Release 1A:** Opportunity Trust Passport (Engine 1) — `COMPLETED`.
    * **Product Release 1B:** Proof-Based Job Fit Backend & Frontend UI (Engine 2) — `COMPLETED`.
-   * **Product Release 2:** Master Career Evidence Profile & Claim Provenance (Engine 3).
-   * **Product Release 3:** Targeted Resume Studio & Role Relevance Auditing (Engine 3).
-   * **Product Release 4:** Adaptive Skill Diagnostic & Fresher Project Readiness (Engine 4).
-   * **Product Release 5:** Job-Specific Interview Studio & Rubric Evaluation (Engine 4).
-   * **Product Release 6:** Application Journey & Outcome Intelligence (Engine 5).
-   * **Product Release 7:** Unified Job-to-Career Platform (Cross-Engine Integration & Polish).
+   * **Product Release 2:** Master Career Evidence Profile & Resume Studio 2.0 (Engine 3) — `COMPLETED`.
+   * **Product Release 3:** Adaptive Career Readiness Diagnostic & Project Proofs (Engine 4).
+   * **Product Release 4:** Job-Specific Interview Studio & Rubric Evaluation (Engine 4).
+   * **Product Release 5:** Application Journey & Outcome Intelligence (Engine 5).
+   * **Product Release 6:** Unified Job-to-Career Platform (Cross-Engine Integration & Polish).
 3. **Deferred Infrastructure Queue:**
    * External Redis cluster failover topology.
    * Distributed OpenTelemetry collector cluster.
@@ -219,23 +225,23 @@ Every future phase, feature, or adapter must strictly comply with `docs/ENGINEER
 
 ## 10. Single Next Approved Task
 
-### **Task: Product Release 2 (P1 — Engine 3: Master Career Evidence Profile & Claim Provenance)**
+### **Task: Product Release 3 (P1 — Engine 4: Adaptive Career Readiness & Interview Studio)**
 
 **Core Objective:**  
-Implement the foundation of Engine 3 (**Career Evidence Profile & Resume Studio 2.0**) as defined in Section 6 and Section 14 of `ROLERADAR_PRODUCT_MASTER_BLUEPRINT.md`. Build the verified Master Career Evidence Profile data layer and API, transitioning the candidate profile from a passive flat text resume into an immutable, verifiable, claim-by-claim structured repository of career proof.
+Implement Engine 4 (**Adaptive Career Readiness & Interview Studio**) as defined in Section 7 and Section 14 of `ROLERADAR_PRODUCT_MASTER_BLUEPRINT.md`. Build the dynamic skill readiness evaluator, fresher project-based proof generator, and job-specific interview simulator with deterministic rubric grading.
 
-**Scope of Implementation (Product Release 2):**
-1. **Master Evidence Schema & Storage:**
-   - Define schema for atomic evidence units: Work Experience, Production Projects, Education, Direct Git Artifacts, and Certifications.
-   - Enforce claim provenance: each claim carries explicit evidence links (live URL, repo, verified credential, or documented achievement).
-2. **Backend Evidence Profile API:**
-   - CRUD endpoints for candidate profile evidence units with type validation and claim atomization.
-   - Evidence grounding verification services for cross-referencing Engine 2 requirement matching.
-3. **Frontend Evidence Profile Management:**
-   - Interactive profile evidence workbench allowing candidates to manage, verify, and categorize their career proof points.
+**Scope of Implementation (Product Release 3):**
+1. **Adaptive Readiness Diagnostic Service:**
+   - Evaluates requirement-by-requirement candidate readiness against verified vacancies.
+   - Converts learnable skill gaps into project proof tasks with measurable milestone criteria.
+2. **Interview Studio & Rubric Evaluation:**
+   - Generates role-specific behavioral and technical interview questions based on actual job requirements.
+   - Evaluates candidate audio/text responses against deterministic rubrics with actionable feedback.
+3. **Frontend Readiness Workbench & Interview Simulator:**
+   - Interactive readiness dashboard with gap closure roadmaps and mock interview simulator.
 4. **Verification & Acceptance:**
    - Full Vitest suite passing, strict TypeScript type check exit 0, and Vite production build clean.
 
 > [!IMPORTANT]
 > **Execution Gate:**  
-> This task is currently **AWAITING USER AUTHORIZATION**. Do not begin implementation of Product Release 2 until the user reviews this handoff and gives explicit approval to proceed.
+> This task is currently **AWAITING USER AUTHORIZATION**. Do not begin implementation of Product Release 3 until the user reviews this handoff and gives explicit approval to proceed.
