@@ -10,3 +10,4 @@ export * from './workspace.service.js';
 export * from './preferences.service.js';
 export * from './alerts.service.js';
 export * from './profile.service.js';
+export * from './resumes.service.js';

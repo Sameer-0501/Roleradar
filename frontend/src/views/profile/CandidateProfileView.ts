@@ -9,6 +9,7 @@
 
 import {
   profileService,
+  resumesService,
   type CandidateProfile,
   type Resume,
   type ProfileCompleteness,
@@ -76,7 +77,10 @@ export function mountCandidateProfileView(options: CandidateProfileViewOptions):
               '<h1 class="kn-heading-1">Candidate Profile & Resumes</h1>' +
               '<p class="kn-text-muted" style="margin-top:4px;">Structured career intelligence extracted from your verified resumes and credentials.</p>' +
             '</div>' +
-            '<button type="button" id="btn-refresh-profile" class="kn-btn kn-btn--secondary">🔄 Refresh</button>' +
+            '<div>' +
+              '<a href="#/dashboard/resume" class="kn-btn kn-btn--primary" style="margin-right:8px;">⚡ Resume Studio 2.0</a>' +
+              '<button type="button" id="btn-refresh-profile" class="kn-btn kn-btn--secondary">🔄 Refresh</button>' +
+            '</div>' +
           '</div>' +
           '<div id="profile-content-slot">' + loadingHtml('Loading candidate profile and resumes...') + '</div>' +
         '</div>' +
@@ -199,6 +203,159 @@ export function mountCandidateProfileView(options: CandidateProfileViewOptions):
 
       addTrackedListener(btn, 'click', handleDelete);
     });
+
+    // ── Direct Candidate Controls: Skills ──
+    const addSkillInput = scopeContainer.querySelector<HTMLInputElement>('#input-add-skill');
+    const addSkillBtn = scopeContainer.querySelector<HTMLButtonElement>('#btn-add-profile-skill');
+    if (addSkillBtn && addSkillInput) {
+      addTrackedListener(addSkillBtn, 'click', async () => {
+        const val = addSkillInput.value.trim();
+        if (!val || isDestroyed) return;
+        addSkillBtn.disabled = true;
+        try {
+          await resumesService.addSkill(val);
+          showToast(`Skill "${val}" added!`, 'success');
+          void loadProfileData();
+        } catch (err: any) {
+          showToast(err?.message || 'Failed to add skill', 'error');
+          addSkillBtn.disabled = false;
+        }
+      });
+    }
+
+    scopeContainer.querySelectorAll<HTMLButtonElement>('.btn-delete-profile-skill').forEach((btn) => {
+      addTrackedListener(btn, 'click', async () => {
+        const skillId = btn.getAttribute('data-skill-id');
+        if (!skillId || isDestroyed) return;
+        try {
+          await resumesService.deleteSkill(skillId);
+          showToast('Skill removed', 'success');
+          void loadProfileData();
+        } catch (err: any) {
+          showToast(err?.message || 'Failed to remove skill', 'error');
+        }
+      });
+    });
+
+    // ── Direct Candidate Controls: Projects ──
+    const toggleProjBtn = scopeContainer.querySelector<HTMLButtonElement>('#btn-toggle-add-project');
+    const projFormBox = scopeContainer.querySelector<HTMLElement>('#form-add-project-box');
+    const cancelProjBtn = scopeContainer.querySelector<HTMLButtonElement>('#btn-cancel-proj');
+    const submitProjBtn = scopeContainer.querySelector<HTMLButtonElement>('#btn-submit-proj');
+
+    if (toggleProjBtn && projFormBox) {
+      addTrackedListener(toggleProjBtn, 'click', () => {
+        projFormBox.style.display = projFormBox.style.display === 'none' ? 'block' : 'none';
+      });
+    }
+    if (cancelProjBtn && projFormBox) {
+      addTrackedListener(cancelProjBtn, 'click', () => {
+        projFormBox.style.display = 'none';
+      });
+    }
+    if (submitProjBtn && projFormBox) {
+      addTrackedListener(submitProjBtn, 'click', async () => {
+        const titleEl = scopeContainer.querySelector<HTMLInputElement>('#input-proj-title');
+        const techsEl = scopeContainer.querySelector<HTMLInputElement>('#input-proj-techs');
+        const descEl = scopeContainer.querySelector<HTMLTextAreaElement>('#input-proj-desc');
+        const title = titleEl?.value.trim();
+        if (!title) {
+          showToast('Project title is required', 'error');
+          return;
+        }
+        submitProjBtn.disabled = true;
+        try {
+          const techs = techsEl?.value.split(',').map((t) => t.trim()).filter(Boolean) || [];
+          await resumesService.addProject({
+            title,
+            technologies: techs,
+            description: descEl?.value.trim(),
+          });
+          showToast('Project added to profile!', 'success');
+          void loadProfileData();
+        } catch (err: any) {
+          showToast(err?.message || 'Failed to add project', 'error');
+          submitProjBtn.disabled = false;
+        }
+      });
+    }
+
+    scopeContainer.querySelectorAll<HTMLButtonElement>('.btn-delete-profile-proj').forEach((btn) => {
+      addTrackedListener(btn, 'click', async () => {
+        const projId = btn.getAttribute('data-proj-id');
+        if (!projId || isDestroyed) return;
+        if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+          if (!window.confirm('Delete this project?')) return;
+        }
+        try {
+          await resumesService.deleteProject(projId);
+          showToast('Project removed', 'success');
+          void loadProfileData();
+        } catch (err: any) {
+          showToast(err?.message || 'Failed to delete project', 'error');
+        }
+      });
+    });
+
+    // ── Direct Candidate Controls: Experience ──
+    const toggleExpBtn = scopeContainer.querySelector<HTMLButtonElement>('#btn-toggle-add-exp');
+    const expFormBox = scopeContainer.querySelector<HTMLElement>('#form-add-exp-box');
+    const cancelExpBtn = scopeContainer.querySelector<HTMLButtonElement>('#btn-cancel-exp');
+    const submitExpBtn = scopeContainer.querySelector<HTMLButtonElement>('#btn-submit-exp');
+
+    if (toggleExpBtn && expFormBox) {
+      addTrackedListener(toggleExpBtn, 'click', () => {
+        expFormBox.style.display = expFormBox.style.display === 'none' ? 'block' : 'none';
+      });
+    }
+    if (cancelExpBtn && expFormBox) {
+      addTrackedListener(cancelExpBtn, 'click', () => {
+        expFormBox.style.display = 'none';
+      });
+    }
+    if (submitExpBtn && expFormBox) {
+      addTrackedListener(submitExpBtn, 'click', async () => {
+        const titleEl = scopeContainer.querySelector<HTMLInputElement>('#input-exp-title');
+        const companyEl = scopeContainer.querySelector<HTMLInputElement>('#input-exp-company');
+        const descEl = scopeContainer.querySelector<HTMLTextAreaElement>('#input-exp-desc');
+        const title = titleEl?.value.trim();
+        const company = companyEl?.value.trim();
+        if (!title || !company) {
+          showToast('Title and Company are required', 'error');
+          return;
+        }
+        submitExpBtn.disabled = true;
+        try {
+          await resumesService.addExperience({
+            title,
+            company,
+            description: descEl?.value.trim(),
+          });
+          showToast('Experience added to profile!', 'success');
+          void loadProfileData();
+        } catch (err: any) {
+          showToast(err?.message || 'Failed to add experience', 'error');
+          submitExpBtn.disabled = false;
+        }
+      });
+    }
+
+    scopeContainer.querySelectorAll<HTMLButtonElement>('.btn-delete-profile-exp').forEach((btn) => {
+      addTrackedListener(btn, 'click', async () => {
+        const expId = btn.getAttribute('data-exp-id');
+        if (!expId || isDestroyed) return;
+        if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+          if (!window.confirm('Delete this experience record?')) return;
+        }
+        try {
+          await resumesService.deleteExperience(expId);
+          showToast('Experience record removed', 'success');
+          void loadProfileData();
+        } catch (err: any) {
+          showToast(err?.message || 'Failed to delete experience', 'error');
+        }
+      });
+    });
   };
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -254,9 +411,15 @@ export function mountCandidateProfileView(options: CandidateProfileViewOptions):
 
       const skillsHtml = profile && profile.skills && profile.skills.length > 0
         ? profile.skills.map((s) => {
-            return '<span class="profile-skill-chip">' + escapeHtml(s.canonicalName) + '<span class="profile-skill-cat">' + escapeHtml(s.category || 'Tech') + '</span></span>';
+            return (
+              '<span class="profile-skill-chip" style="display:inline-flex; align-items:center; gap:6px;">' +
+                escapeHtml(s.canonicalName) +
+                '<span class="profile-skill-cat">' + escapeHtml(s.category || 'Tech') + '</span>' +
+                '<button type="button" class="btn-delete-profile-skill" data-skill-id="' + escapeHtml(s.id) + '" title="Remove skill" style="border:none; background:none; color:#ef4444; font-size:12px; cursor:pointer; padding:0 2px; font-weight:bold;">×</button>' +
+              '</span>'
+            );
           }).join('')
-        : '<p class="kn-text-muted">No skills parsed yet. Upload your resume or add target skills.</p>';
+        : '<p class="kn-text-muted">No skills parsed yet. Add your target skills below or upload your resume.</p>';
 
       const eduHtml = profile && profile.educations && profile.educations.length > 0
         ? profile.educations.map((e) => {
@@ -276,25 +439,31 @@ export function mountCandidateProfileView(options: CandidateProfileViewOptions):
               ? '<div class="profile-proj-techs">' + p.technologies.map((t) => '<span class="profile-tech-mini">' + escapeHtml(t) + '</span>').join('') + '</div>'
               : '';
             return (
-              '<div class="profile-history-item">' +
-                '<strong>' + escapeHtml(p.title) + '</strong>' +
-                (p.description ? '<p class="kn-text-muted" style="margin:4px 0;">' + escapeHtml(p.description) + '</p>' : '') +
-                techChips +
+              '<div class="profile-history-item" style="display:flex; justify-content:space-between; align-items:flex-start;">' +
+                '<div>' +
+                  '<strong>' + escapeHtml(p.title) + '</strong>' +
+                  (p.description ? '<p class="kn-text-muted" style="margin:4px 0;">' + escapeHtml(p.description) + '</p>' : '') +
+                  techChips +
+                '</div>' +
+                '<button type="button" class="btn-delete-profile-proj" data-proj-id="' + escapeHtml(p.id) + '" style="border:none; background:none; color:#ef4444; font-size:0.75rem; cursor:pointer; padding:2px 6px;">Delete</button>' +
               '</div>'
             );
           }).join('')
-        : '<p class="kn-text-muted">No projects recorded yet.</p>';
+        : '<p class="kn-text-muted">No projects recorded yet. Add an academic or portfolio project below (+15% completeness).</p>';
 
       const expHtml = profile && profile.experiences && profile.experiences.length > 0
         ? profile.experiences.map((exp) => {
             return (
-              '<div class="profile-history-item">' +
-                '<strong>' + escapeHtml(exp.title) + ' at ' + escapeHtml(exp.companyName) + ' ' + (exp.isInternship ? '<span class="resume-badge">Internship</span>' : '') + '</strong>' +
-                (exp.description ? '<p class="kn-text-muted" style="margin:4px 0;">' + escapeHtml(exp.description) + '</p>' : '') +
+              '<div class="profile-history-item" style="display:flex; justify-content:space-between; align-items:flex-start;">' +
+                '<div>' +
+                  '<strong>' + escapeHtml(exp.title) + ' at ' + escapeHtml(exp.companyName) + ' ' + (exp.isInternship ? '<span class="resume-badge">Internship</span>' : '') + '</strong>' +
+                  (exp.description ? '<p class="kn-text-muted" style="margin:4px 0;">' + escapeHtml(exp.description) + '</p>' : '') +
+                '</div>' +
+                '<button type="button" class="btn-delete-profile-exp" data-exp-id="' + escapeHtml(exp.id) + '" style="border:none; background:none; color:#ef4444; font-size:0.75rem; cursor:pointer; padding:2px 6px;">Delete</button>' +
               '</div>'
             );
           }).join('')
-        : '<p class="kn-text-muted">No experience or internships recorded.</p>';
+        : '<p class="kn-text-muted">No experience or internships recorded. Add work or internship experience below (+15% completeness).</p>';
 
       slotEl.innerHTML = (
         '<div class="profile-grid">' +
@@ -342,8 +511,12 @@ export function mountCandidateProfileView(options: CandidateProfileViewOptions):
           '<!-- Column 2: Extracted Structured Data -->' +
           '<div class="profile-col-right">' +
             '<div class="kn-card profile-card">' +
-              '<div class="profile-section-header">' +
-                '<h3 style="font-size:1.1rem; font-weight:600; margin-bottom:12px;">⚡ Extracted Skills (' + (profile && profile.skills ? profile.skills.length : 0) + ')</h3>' +
+              '<div class="profile-section-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">' +
+                '<h3 style="font-size:1.1rem; font-weight:600; margin:0;">⚡ Extracted Skills (' + (profile && profile.skills ? profile.skills.length : 0) + ')</h3>' +
+              '</div>' +
+              '<div style="display:flex; gap:6px; margin-bottom:12px;">' +
+                '<input type="text" id="input-add-skill" class="kn-input" placeholder="Add skill (e.g. React, Docker, Python)..." style="font-size:0.85rem; padding:4px 8px; flex:1;" />' +
+                '<button type="button" id="btn-add-profile-skill" class="kn-btn kn-btn--secondary" style="font-size:0.85rem; padding:4px 12px;">+ Add Skill</button>' +
               '</div>' +
               '<div class="profile-skills-wrap">' +
                 skillsHtml +
@@ -358,14 +531,38 @@ export function mountCandidateProfileView(options: CandidateProfileViewOptions):
             '</div>' +
 
             '<div class="kn-card profile-card">' +
-              '<h3 style="font-size:1.1rem; font-weight:600; margin-bottom:12px;">💼 Experience & Internships</h3>' +
+              '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">' +
+                '<h3 style="font-size:1.1rem; font-weight:600; margin:0;">💼 Experience & Internships</h3>' +
+                '<button type="button" id="btn-toggle-add-exp" class="kn-btn kn-btn--secondary" style="font-size:0.8rem; padding:2px 8px;">+ Add Experience</button>' +
+              '</div>' +
+              '<div id="form-add-exp-box" style="display:none; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:12px; margin-bottom:12px;">' +
+                '<input type="text" id="input-exp-title" class="kn-input" placeholder="Role / Job Title" style="width:100%; margin-bottom:6px; font-size:0.85rem;" />' +
+                '<input type="text" id="input-exp-company" class="kn-input" placeholder="Company Name" style="width:100%; margin-bottom:6px; font-size:0.85rem;" />' +
+                '<textarea id="input-exp-desc" class="kn-input" placeholder="Responsibilities and accomplishments" rows="2" style="width:100%; margin-bottom:6px; font-size:0.85rem;"></textarea>' +
+                '<div style="display:flex; justify-content:flex-end; gap:6px;">' +
+                  '<button type="button" id="btn-cancel-exp" class="kn-btn kn-btn--secondary" style="font-size:0.8rem; padding:2px 8px;">Cancel</button>' +
+                  '<button type="button" id="btn-submit-exp" class="kn-btn kn-btn--primary" style="font-size:0.8rem; padding:2px 8px;">Save Experience</button>' +
+                '</div>' +
+              '</div>' +
               '<div class="profile-section-content">' +
                 expHtml +
               '</div>' +
             '</div>' +
 
             '<div class="kn-card profile-card">' +
-              '<h3 style="font-size:1.1rem; font-weight:600; margin-bottom:12px;">🚀 Projects & Portfolio</h3>' +
+              '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">' +
+                '<h3 style="font-size:1.1rem; font-weight:600; margin:0;">🚀 Projects & Portfolio</h3>' +
+                '<button type="button" id="btn-toggle-add-project" class="kn-btn kn-btn--secondary" style="font-size:0.8rem; padding:2px 8px;">+ Add Project</button>' +
+              '</div>' +
+              '<div id="form-add-project-box" style="display:none; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:12px; margin-bottom:12px;">' +
+                '<input type="text" id="input-proj-title" class="kn-input" placeholder="Project Name" style="width:100%; margin-bottom:6px; font-size:0.85rem;" />' +
+                '<input type="text" id="input-proj-techs" class="kn-input" placeholder="Technologies (comma separated)" style="width:100%; margin-bottom:6px; font-size:0.85rem;" />' +
+                '<textarea id="input-proj-desc" class="kn-input" placeholder="Project description and key outcomes" rows="2" style="width:100%; margin-bottom:6px; font-size:0.85rem;"></textarea>' +
+                '<div style="display:flex; justify-content:flex-end; gap:6px;">' +
+                  '<button type="button" id="btn-cancel-proj" class="kn-btn kn-btn--secondary" style="font-size:0.8rem; padding:2px 8px;">Cancel</button>' +
+                  '<button type="button" id="btn-submit-proj" class="kn-btn kn-btn--primary" style="font-size:0.8rem; padding:2px 8px;">Save Project</button>' +
+                '</div>' +
+              '</div>' +
               '<div class="profile-section-content">' +
                 projHtml +
               '</div>' +

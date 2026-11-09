@@ -15,6 +15,7 @@ export * from './alerts/AlertsView.js';
 export * from './profile/CandidateProfileView.js';
 export * from './account/AccountSettingsView.js';
 export * from './resume/ResumeBuilderView.js';
+export * from './resume/ResumeStudioView.js';
 export * from './prep/PlacementPrepView.js';
 export * from './admin/AdminConsoleView.js';
 export * from './landing/LandingView.js';

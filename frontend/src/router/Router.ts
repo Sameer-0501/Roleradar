@@ -25,6 +25,7 @@ import {
   mountCandidateProfileView,
   mountAccountSettingsView,
   mountResumeBuilderView,
+  mountResumeStudioView,
   mountPlacementPrepView,
   mountAdminConsoleView,
   mountLandingView,
@@ -504,7 +505,7 @@ export class Router {
           break;
 
         case 'resume':
-          this.currentViewController = mountResumeBuilderView({
+          this.currentViewController = mountResumeStudioView({
             container: container,
             routePath: path,
             showToast: this.options.showToast,

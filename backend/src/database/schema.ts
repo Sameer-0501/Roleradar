@@ -830,3 +830,132 @@ export const betaFeedbackRelations = relations(betaFeedback, ({ one }) => ({
     references: [jobs.id],
   }),
 }));
+
+// ─── Engine 3: Career Evidence Profile & Resume Studio 2.0 ──────────────────
+
+export const candidateCareerProfiles = pgTable(
+  'candidate_career_profiles',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    user_id: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    professional_headline: text('professional_headline'),
+    career_objective: text('career_objective'),
+    created_at: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updated_at: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('candidate_career_profiles_user_id_unique').on(t.user_id),
+    index('candidate_career_profiles_user_idx').on(t.user_id),
+  ]
+);
+
+export const candidateEvidence = pgTable(
+  'candidate_evidence',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    user_id: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    evidence_type: text('evidence_type').notNull(),
+    reference_id: uuid('reference_id'),
+    claim_text: text('claim_text').notNull(),
+    verified_status: text('verified_status').notNull().default('SELF_REPORTED'),
+    created_at: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index('candidate_evidence_user_idx').on(t.user_id),
+    index('candidate_evidence_type_idx').on(t.user_id, t.evidence_type),
+  ]
+);
+
+export const resumeDocuments = pgTable(
+  'resume_documents',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    user_id: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    profile_id: uuid('profile_id')
+      .notNull()
+      .references(() => candidateCareerProfiles.id, { onDelete: 'cascade' }),
+    variant_name: text('variant_name').notNull(),
+    is_master: boolean('is_master').notNull().default(false),
+    created_at: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updated_at: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index('resume_documents_user_idx').on(t.user_id),
+    index('resume_documents_profile_idx').on(t.profile_id),
+  ]
+);
+
+export const resumeBullets = pgTable(
+  'resume_bullets',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    resume_id: uuid('resume_id')
+      .notNull()
+      .references(() => resumeDocuments.id, { onDelete: 'cascade' }),
+    evidence_id: uuid('evidence_id')
+      .references(() => candidateEvidence.id, { onDelete: 'set null' }),
+    bullet_text: text('bullet_text').notNull(),
+    provenance_state: text('provenance_state').notNull().default('UNLINKED'),
+    display_order: integer('display_order').notNull().default(0),
+  },
+  (t) => [
+    index('resume_bullets_resume_idx').on(t.resume_id),
+    index('resume_bullets_evidence_idx').on(t.evidence_id),
+  ]
+);
+
+export const candidateCareerProfilesRelations = relations(candidateCareerProfiles, ({ one, many }) => ({
+  user: one(users, {
+    fields: [candidateCareerProfiles.user_id],
+    references: [users.id],
+  }),
+  resumeDocuments: many(resumeDocuments),
+}));
+
+export const candidateEvidenceRelations = relations(candidateEvidence, ({ one, many }) => ({
+  user: one(users, {
+    fields: [candidateEvidence.user_id],
+    references: [users.id],
+  }),
+  bullets: many(resumeBullets),
+}));
+
+export const resumeDocumentsRelations = relations(resumeDocuments, ({ one, many }) => ({
+  user: one(users, {
+    fields: [resumeDocuments.user_id],
+    references: [users.id],
+  }),
+  profile: one(candidateCareerProfiles, {
+    fields: [resumeDocuments.profile_id],
+    references: [candidateCareerProfiles.id],
+  }),
+  bullets: many(resumeBullets),
+}));
+
+export const resumeBulletsRelations = relations(resumeBullets, ({ one }) => ({
+  resume: one(resumeDocuments, {
+    fields: [resumeBullets.resume_id],
+    references: [resumeDocuments.id],
+  }),
+  evidence: one(candidateEvidence, {
+    fields: [resumeBullets.evidence_id],
+    references: [candidateEvidence.id],
+  }),
+}));
+

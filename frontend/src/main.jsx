@@ -6,6 +6,7 @@ import './legacy/app.css';
 import './legacy/dashboard.css';
 import './legacy/trust-passport.css';
 import './legacy/job-fit.css';
+import './legacy/resume-studio.css';
 import './modules/onboarding/onboarding.css';
 
 // Import Legacy Data Seeds

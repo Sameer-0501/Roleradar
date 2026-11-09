@@ -88,6 +88,27 @@ import {
   getCompletenessHandler,
   compareJobHandler,
 } from './profile.js';
+import {
+  getCareerProfileHandler,
+  updateCareerProfileHandler,
+  listEvidenceHandler,
+  addEvidenceHandler,
+  deleteEvidenceHandler,
+  syncEvidenceHandler,
+  addCandidateSkillHandler,
+  deleteCandidateSkillHandler,
+  addCandidateProjectHandler,
+  deleteCandidateProjectHandler,
+  addCandidateExperienceHandler,
+  deleteCandidateExperienceHandler,
+  tailorResumeHandler,
+  listResumeVariantsHandler,
+  getResumeVariantHandler,
+  addResumeBulletHandler,
+  deleteResumeBulletHandler,
+  deleteResumeVariantHandler,
+  inspectATSResumeHandler,
+} from './resumes.js';
 import { submitBetaFeedbackHandler } from './feedback.js';
 import { recordVitalsHandler, getVitalsSummaryHandler } from './telemetry.js';
 import { streamAIResponseHandler } from './stream.js';
@@ -213,6 +234,86 @@ export function createRouter(): Router {
 
   router.post('/profile/compare-job/:jobId', requireAuth, (req, res) => {
     void compareJobHandler(req, res);
+  });
+
+  // ── Engine 3: Career Evidence Profile & Resume Studio 2.0 (Authenticated) ─
+  router.get('/candidate/career-profile', requireAuth, (req, res) => {
+    void getCareerProfileHandler(req, res);
+  });
+
+  router.put('/candidate/career-profile', requireAuth, (req, res) => {
+    void updateCareerProfileHandler(req, res);
+  });
+
+  router.get('/candidate/evidence', requireAuth, (req, res) => {
+    void listEvidenceHandler(req, res);
+  });
+
+  router.post('/candidate/evidence', requireAuth, (req, res) => {
+    void addEvidenceHandler(req, res);
+  });
+
+  router.delete('/candidate/evidence/:id', requireAuth, (req, res) => {
+    void deleteEvidenceHandler(req, res);
+  });
+
+  router.post('/candidate/evidence/sync', requireAuth, (req, res) => {
+    void syncEvidenceHandler(req, res);
+  });
+
+  // Candidate Direct Controls (Skills, Projects, Experience)
+  router.post('/candidate/skills', requireAuth, (req, res) => {
+    void addCandidateSkillHandler(req, res);
+  });
+
+  router.delete('/candidate/skills/:id', requireAuth, (req, res) => {
+    void deleteCandidateSkillHandler(req, res);
+  });
+
+  router.post('/candidate/projects', requireAuth, (req, res) => {
+    void addCandidateProjectHandler(req, res);
+  });
+
+  router.delete('/candidate/projects/:id', requireAuth, (req, res) => {
+    void deleteCandidateProjectHandler(req, res);
+  });
+
+  router.post('/candidate/experiences', requireAuth, (req, res) => {
+    void addCandidateExperienceHandler(req, res);
+  });
+
+  router.delete('/candidate/experiences/:id', requireAuth, (req, res) => {
+    void deleteCandidateExperienceHandler(req, res);
+  });
+
+  // Resume Studio & Tailoring
+  router.post('/resumes/tailor', requireAuth, (req, res) => {
+    void tailorResumeHandler(req, res);
+  });
+
+  router.get('/resumes/variants', requireAuth, (req, res) => {
+    void listResumeVariantsHandler(req, res);
+  });
+
+  router.get('/resumes/variants/:id', requireAuth, (req, res) => {
+    void getResumeVariantHandler(req, res);
+  });
+
+  router.post('/resumes/variants/:id/bullets', requireAuth, (req, res) => {
+    void addResumeBulletHandler(req, res);
+  });
+
+  router.delete('/resumes/variants/:id/bullets/:bulletId', requireAuth, (req, res) => {
+    void deleteResumeBulletHandler(req, res);
+  });
+
+  router.delete('/resumes/variants/:id', requireAuth, (req, res) => {
+    void deleteResumeVariantHandler(req, res);
+  });
+
+  // Local ATS Simulator
+  router.post('/resumes/inspect-ats', requireAuth, (req, res) => {
+    void inspectATSResumeHandler(req, res);
   });
 
   // ── Personal Job-Seeker Workspace Endpoints (Authenticated) ──────────────
