@@ -17,13 +17,13 @@ All prior informal status logs, speculative markdown claims, and interim scratch
 
 ## 2. Current Phase and Roadmap Position
 
-* **Current Active Phase:** **Product Release 1A (Engine 1: Opportunity Trust Passport)** — `COMPLETED`.
+* **Current Active Phase:** **Product Release 1B — Part A (Engine 2: Proof-Based Job Fit Backend Core)** — `COMPLETED`.
 * **Prior Source Expansion:** **Phase 20.5 (Controlled Workday Source Expansion)** — Formally `PAUSED` after Batch 8 admission.
-* **Next Approved Milestone:** **Product Release 1B (P0 — Engine 2: Proof-Based Job Fit / RoleRadar Job Fit Intelligence)** — Awaiting explicit user approval before execution.
+* **Next Approved Milestone:** **Product Release 1B — Part B (P0 — Engine 2: Proof-Based Job Fit Frontend UI & E2E Integration)** — Awaiting explicit user approval before execution.
 
 ```
-[Phase 20.5 Workday Expansion Batches 1-8] ──► [Section 19 Reconciliation] ──► [Product Release 1A: Trust Passport] ──► [Product Release 1B: Job Fit Intelligence]
-              (COMPLETED & PAUSED)                           (COMPLETED)                           (COMPLETED)                               (NEXT APPROVED TASK)
+[Phase 20.5 Workday Expansion Batches 1-8] ──► [Section 19 Reconciliation] ──► [Release 1A: Trust Passport] ──► [Release 1B Part A: Fit Backend] ──► [Release 1B Part B: Fit Frontend UI]
+              (COMPLETED & PAUSED)                           (COMPLETED)                     (COMPLETED)                       (COMPLETED)                           (NEXT APPROVED TASK)
 ```
 
 ---
@@ -34,6 +34,8 @@ Every commit on `main` has been forensically verified via `git log`, `git show -
 
 | Commit Hash | Commit Title | Affected Core Files | Maturity Classification | Evidence & Status |
 | :--- | :--- | :--- | :--- | :--- |
+| Pending | `feat(matching): implement Engine 2 Proof-Based Job Fit backend core and candidate controls` | `proof-based-fit-service.ts`, `jobs.ts`, `router.ts`, `schema.ts`, `0017_proof_based_fit_controls.sql`, `proof-based-job-fit.test.ts` | `PRODUCTION-READY` | 6-state evaluation vocabulary, requirement atomization, candidate disputes/clarifications, 13/13 passing tests. |
+| `a73328a` | `docs(handoff): record Engine 1 verified commit efecb09` | `ROLERADAR_MASTER_HANDOFF.md` | `PRODUCTION-READY` | Verified Engine 1 ground truth commit recorded in handoff. |
 | `efecb09` | `feat(trust): implement Engine 1 Opportunity Trust Passport and forensic inspector` | `trust-passport-service.ts`, `jobs.ts`, `router.ts`, `matching-*`, `TrustPassportDrawer.ts`, `trust-passport.css`, views | `PRODUCTION-READY` | Deterministic 6-dimension Trust Passport service, 6 transparent statuses, API projections, and frontend inspector. |
 | `71e9f17` | `docs(blueprint): establish Product Master Blueprint and verified Master Handoff` | `ROLERADAR_PRODUCT_MASTER_BLUEPRINT.md`, `ROLERADAR_MASTER_HANDOFF.md` | `PRODUCTION-READY` | Established four-document governance structure and ground truth baseline. |
 | `2520b73` | `docs: enforce mandatory pre-execution blueprint and strategy alignment check` | `docs/AGENTS.md`, `docs/RR_PRODUCT_MASTER_BLUEPRINT.md` | `PRODUCTION-READY` | Pre-execution safety rule active across agent adapters. |
@@ -149,10 +151,16 @@ All verification suites executed on November 9, 2026 passed with **0 errors**:
   * `dist/assets/index-BKwfR9G2.js`: 340.85 kB (gzip: 86.60 kB)
 
 ### 6.5 Opportunity Trust Passport Engine 1 Suite
-* **Command:** `Set-Location backend; npx vitest run src/tests/opportunity-trust-passport.test.ts src/tests/digest-concurrency-integration.test.ts src/tests/url-validator.test.ts src/tests/adobe-dual-domain-provenance.test.ts src/tests/apply-action-semantics.test.ts`
-* **Result:** **5 test files passed (5/5), 71 tests passed (71/71)**
-* **Execution Duration:** 3.90s
-* **Coverage:** Deterministic 6-dimension evaluation, 6 transparent opportunity statuses, partial-scan protection against premature closure, unstated compensation/freshness transparency, alternate-domain provenance validation, API batch and detail projections, non-destructive synthetic test fixture isolation.
+* **Command:** `Set-Location backend; npx vitest run src/tests/opportunity-trust-passport.test.ts`
+* **Result:** **26 tests passed (26/26)**
+* **Execution Duration:** 359ms
+* **Coverage:** Deterministic 6-dimension evaluation, 6 transparent opportunity statuses, live runtime pipeline verification test asserting dynamic database reflection, partial-scan protection against premature closure, unstated compensation/freshness transparency, alternate-domain provenance validation, API batch and detail projections, non-destructive synthetic test fixture isolation.
+
+### 6.6 Proof-Based Job Fit Engine 2 Backend Suite
+* **Command:** `Set-Location backend; npx vitest run src/tests/proof-based-job-fit.test.ts src/tests/opportunity-trust-passport.test.ts src/tests/digest-concurrency-integration.test.ts src/tests/url-validator.test.ts src/tests/adobe-dual-domain-provenance.test.ts src/tests/apply-action-semantics.test.ts`
+* **Result:** **6 test files passed (6/6), 85 tests passed (85/85)**
+* **Execution Duration:** 2.89s
+* **Coverage:** Structured requirement extraction (mandatory vs preferred vs responsibilities vs conditions), 6-state evaluation vocabulary (`SUPPORTED`, `PARTIALLY_SUPPORTED`, `NOT_SUPPORTED`, `UNKNOWN`, `HARD_ELIGIBILITY_CONCERN`, `NOT_APPLICABLE`), Indian Fresher profile matching vs Senior 5+ year blocker, Experienced profile evidence grounding (`EXPERIENCE`, `PROJECT`, `EDUCATION`), International location mismatch boundary enforcement, empty profile non-rejection (`UNKNOWN` action prompts), candidate controls persistence (`fit_controls` JSONB on `user_job_interactions`), strict user isolation, and synthetic teardown.
 
 ---
 
@@ -192,7 +200,8 @@ Every future phase, feature, or adapter must strictly comply with `docs/ENGINEER
    * *Future Pipeline:* Batch 9+ candidate discovery (Workday, SmartRecruiters, SAP, Taleo) queued for future phases. 64 Workday sources provide sufficient scale for Product Releases 1–7.
 2. **Product Roadmap Execution Queue:**
    * **Product Release 1A:** Opportunity Trust Passport (Engine 1) — `COMPLETED`.
-   * **Product Release 1B:** Proof-Based Job Fit / RoleRadar Job Fit Intelligence (Engine 2).
+   * **Product Release 1B (Part A):** Proof-Based Job Fit Backend Core (Engine 2) — `COMPLETED`.
+   * **Product Release 1B (Part B):** Proof-Based Job Fit Frontend UI & E2E Integration (Engine 2).
    * **Product Release 2:** Master Career Evidence Profile & Claim Provenance (Engine 3).
    * **Product Release 3:** Targeted Resume Studio & Role Relevance Auditing (Engine 3).
    * **Product Release 4:** Adaptive Skill Diagnostic & Fresher Project Readiness (Engine 4).
@@ -208,19 +217,24 @@ Every future phase, feature, or adapter must strictly comply with `docs/ENGINEER
 
 ## 10. Single Next Approved Task
 
-### **Task: Product Release 1B (P0 — Engine 2: Proof-Based Job Fit / RoleRadar Job Fit Intelligence)**
+### **Task: Product Release 1B — Part B (P0 — Engine 2: Proof-Based Job Fit Frontend UI & E2E Integration)**
 
 **Core Objective:**  
-Implement Engine 2 (**Proof-Based Job Fit / RoleRadar Job Fit Intelligence**) to replace opaque ATS percentage match scores with an explainable, requirement-by-requirement evaluation grounded in verified candidate evidence, in strict compliance with `ROLERADAR_PRODUCT_MASTER_BLUEPRINT.md` (Section 5) and `docs/ENGINEERING_STANDARDS.md`.
+Implement the frontend user interface and end-to-end integration for Engine 2 (**Proof-Based Job Fit / RoleRadar Job Fit Intelligence**) in strict compliance with `ROLERADAR_PRODUCT_MASTER_BLUEPRINT.md` (Section 5) and `docs/ENGINEERING_STANDARDS.md`.
 
-**Scope of Implementation (Release 1B):**
-1. **Requirement Atomizer & Categorizer:** Parse and structure job description requirements into atomic criteria (must-have skills, preferred skills, domain experience, education/credentials) without LLM hallucinations.
-2. **Deterministic Match Scoring Engine:** Compute transparent qualification alignment across candidate skills, projects, and career evidence, categorizing criteria into: `VERIFIED MET`, `PARTIALLY MET`, `UNMET / GAP`, and `UNSTATED`.
-3. **Missing Requirement Gap Analysis:** For every gap or unmet requirement, generate an actionable bridge strategy (e.g., specific project recommendations, targeted learning modules, diagnostic assessments).
-4. **API Integration:** Expose `GET /api/jobs/:id/fit-analysis` projecting the granular fit breakdown, while embedding lightweight match summaries in existing candidate job feeds.
-5. **UI Proof-Based Job Fit Drawer & Indicators:** Build frontend React components: match category breakdown pill, requirement audit cards, evidence link badges, and gap resolution recommendations.
-6. **Empirical Verification & Testing:** Comprehensive Vitest unit and integration test suite asserting deterministic match calculation, gap identification, synthetic candidate profile fixture teardown, `tsc --noEmit` exit 0, and frontend build exit 0.
+**Scope of Implementation (Release 1B — Part B):**
+1. **Frontend Fit API Client:** Add `getProofFit(jobId)` and `updateProofFitControls(jobId, controls)` to `frontend/src/services/api/jobs.service.ts` with full TypeScript type definitions matching the backend contract.
+2. **Proof-Based Job Fit Inspector Drawer (`frontend/src/components/ProofFitDrawer.ts`):**
+   - Accessible slide-over drawer displaying overall eligibility banner (`ELIGIBLE`, `ELIGIBILITY_CONCERN_DETECTED`, `NEEDS_PROFILE_COMPLETION`).
+   - Grouped cards for Mandatory Requirements, Preferred Qualifications, Responsibilities, and Employment Conditions.
+   - Requirement evidence chips displaying concrete proof source (`PROJECT`, `EXPERIENCE`, `EDUCATION`, `CERTIFICATION`, `PROFILE_SKILL`).
+   - Hard Eligibility Concern callouts and Learnable Skill Gap resolution action recommendations.
+   - Candidate Agency controls allowing inline requirement disputes and missing context clarifications.
+3. **Dashboard & Verified Jobs Job Card Indicators:**
+   - Add eligibility pill and fit summary chips to job cards alongside the Trust Passport strip.
+   - Wire "🎯 Job Fit" button to trigger the Proof-Based Job Fit drawer.
+4. **Verification & Acceptance:** Vite production build exit 0, Vitest regression suite 85/85 passing, and sanitized report in Antigravity Brains.
 
 > [!IMPORTANT]
 > **Execution Gate:**  
-> This task is currently **AWAITING USER AUTHORIZATION**. Do not begin implementation of Product Release 1B until the user reviews this handoff and gives explicit approval to proceed.
+> This task is currently **AWAITING USER AUTHORIZATION**. Do not begin implementation of Product Release 1B Part B until the user reviews this handoff and gives explicit approval to proceed.

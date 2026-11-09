@@ -432,6 +432,10 @@ export const userJobInteractions = pgTable(
     reminder_at: timestamp('reminder_at', { withTimezone: true }),
     interview_notes: text('interview_notes'),
     interview_notes_updated_at: timestamp('interview_notes_updated_at', { withTimezone: true }),
+    fit_controls: jsonb('fit_controls').$type<{
+      disputedRequirements?: Array<{ requirementId: string; reason: string; candidateNote?: string; disputedAt: string }>;
+      suppliedClarifications?: Array<{ requirementId: string; clarification: string; value?: string; suppliedAt: string }>;
+    }>().default({}),
     created_at: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

@@ -19,6 +19,8 @@ import {
   listVerifiedJobsHandler,
   getJobByIdHandler,
   getJobTrustPassportHandler,
+  getJobProofFitHandler,
+  updateJobProofFitControlsHandler,
 } from './jobs.js';
 import { getMatchedJobsHandler, getTodayMatchedJobsHandler } from './matching.js';
 import { listCompaniesHandler } from './companies.js';
@@ -424,6 +426,15 @@ export function createRouter(): Router {
 
   router.get('/jobs/:id/trust-passport', (req, res) => {
     void getJobTrustPassportHandler(req, res);
+  });
+
+  // ── Engine 2 Proof-Based Job Fit & Candidate Controls (Authenticated) ─────
+  router.get('/jobs/:id/proof-fit', requireAuth, (req, res) => {
+    void getJobProofFitHandler(req, res);
+  });
+
+  router.post('/jobs/:id/proof-fit/controls', requireAuth, (req, res) => {
+    void updateJobProofFitControlsHandler(req, res);
   });
 
   router.get('/jobs/:id', (req, res) => {

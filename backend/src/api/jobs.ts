@@ -22,6 +22,10 @@ import {
   buildOpportunityTrustPassport,
   buildTrustSummary,
 } from '../trust/trust-passport-service.js';
+import {
+  getProofBasedJobFit,
+  updateProofFitControls,
+} from '../matching/proof-based-fit-service.js';
 
 const log = createLogger('api:jobs');
 
@@ -377,5 +381,90 @@ export async function getJobTrustPassportHandler(req: Request, res: Response): P
       'getJobTrustPassportHandler error'
     );
     res.status(500).json({ error: 'Failed to build opportunity trust passport' });
+  }
+}
+
+function getUserId(req: Request): string | null {
+  const user = (req as any).user;
+  return user?.id ?? user?.userId ?? null;
+}
+
+/**
+ * GET /api/jobs/:id/proof-fit
+ *
+ * Computes and returns the full ProofBasedJobFitAnalysis for the authenticated
+ * candidate and target job UUID (Engine 2 — Blueprint Section 5).
+ */
+export async function getJobProofFitHandler(req: Request, res: Response): Promise<void> {
+  const userId = getUserId(req);
+  if (!userId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+
+  const id = req.params['id'];
+  if (!id || typeof id !== 'string' || !/^[0-9a-f-]{36}$/i.test(id)) {
+    res.status(400).json({ error: 'Invalid job ID format' });
+    return;
+  }
+
+  try {
+    const fitAnalysis = await getProofBasedJobFit(userId, id);
+    res.json({ fitAnalysis });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('Job not found')) {
+      res.status(404).json({ error: 'Job not found' });
+      return;
+    }
+    log.error({ id, userId, err: msg }, 'getJobProofFitHandler error');
+    res.status(500).json({ error: 'Failed to evaluate proof-based job fit' });
+  }
+}
+
+/**
+ * POST /api/jobs/:id/proof-fit/controls
+ *
+ * Allows authenticated candidate to save requirement disputes/clarifications
+ * and returns the immediately re-evaluated ProofBasedJobFitAnalysis.
+ */
+export async function updateJobProofFitControlsHandler(req: Request, res: Response): Promise<void> {
+  const userId = getUserId(req);
+  if (!userId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+
+  const id = req.params['id'];
+  if (!id || typeof id !== 'string' || !/^[0-9a-f-]{36}$/i.test(id)) {
+    res.status(400).json({ error: 'Invalid job ID format' });
+    return;
+  }
+
+  const controls = req.body || {};
+  if (
+    !Array.isArray(controls.disputedRequirements) &&
+    !Array.isArray(controls.suppliedClarifications)
+  ) {
+    res.status(400).json({
+      error: 'Invalid fit controls payload — expected disputedRequirements or suppliedClarifications array',
+    });
+    return;
+  }
+
+  try {
+    const fitAnalysis = await updateProofFitControls(userId, id, controls);
+    res.json({
+      message: 'Fit controls updated successfully',
+      fitAnalysis,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('Job not found')) {
+      res.status(404).json({ error: 'Job not found' });
+      return;
+    }
+    log.error({ id, userId, err: msg }, 'updateJobProofFitControlsHandler error');
+    res.status(500).json({ error: 'Failed to update fit controls' });
   }
 }
