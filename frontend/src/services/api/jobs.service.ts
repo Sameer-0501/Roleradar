@@ -12,6 +12,8 @@ import type {
   VerifiedJobsResponse,
   JobDetailsResponse,
   SearchSuggestionItem,
+  OpportunityTrustPassport,
+  TrustPassportResponse,
 } from './types.js';
 
 export const jobsService = {
@@ -60,6 +62,14 @@ export const jobsService = {
    */
   async getJobById(jobId: string): Promise<JobDetailsResponse> {
     return httpClient.get<JobDetailsResponse>(`/jobs/${encodeURIComponent(jobId)}`);
+  },
+
+  /**
+   * Retrieves the inspectable Opportunity Trust Passport (Engine 1) for a job.
+   */
+  async getTrustPassport(jobId: string): Promise<OpportunityTrustPassport> {
+    const res = await httpClient.get<TrustPassportResponse>(`/jobs/${encodeURIComponent(jobId)}/trust-passport`);
+    return res.passport;
   },
 
   /**

@@ -18,6 +18,10 @@ import { createLogger } from '../utils/logger.js';
 import { evaluateJobFreshness } from '../matching/relevance/freshness-evaluator.js';
 import { parseExperienceRequirements } from '../matching/experience-parser.js';
 import { cacheService } from '../cache/redis-cache.js';
+import {
+  buildOpportunityTrustPassport,
+  buildTrustSummary,
+} from '../trust/trust-passport-service.js';
 
 const log = createLogger('api:jobs');
 
@@ -74,12 +78,14 @@ export async function listJobsHandler(req: Request, res: Response): Promise<void
         status: schema.jobs.status,
         verification_status: schema.jobs.verification_status,
         source_system: schema.jobs.source_system,
+        external_job_id: schema.jobs.external_job_id,
         first_seen_at: schema.jobs.first_seen_at,
         last_seen_at: schema.jobs.last_seen_at,
         last_verified_at: schema.jobs.last_verified_at,
         official_posted_at: schema.jobs.official_posted_at,
         company_id: schema.jobs.company_id,
         company_name: schema.companies.name,
+        company_domain: schema.companies.official_domain,
       })
       .from(schema.jobs)
       .leftJoin(schema.companies, eq(schema.jobs.company_id, schema.companies.id))
@@ -87,9 +93,30 @@ export async function listJobsHandler(req: Request, res: Response): Promise<void
       .limit(limit)
       .offset(offset);
 
-    const jobs = conditions.length > 0
+    const rows = conditions.length > 0
       ? await query.where(and(...conditions))
       : await query;
+
+    const jobs = rows.map((r) => ({
+      ...r,
+      trustSummary: buildTrustSummary(
+        {
+          id: r.id,
+          status: r.status,
+          verification_status: r.verification_status,
+          source_system: r.source_system,
+          external_job_id: r.external_job_id,
+          official_url: r.official_url,
+          first_seen_at: r.first_seen_at,
+          last_verified_at: r.last_verified_at,
+          official_posted_at: r.official_posted_at,
+        },
+        {
+          name: r.company_name,
+          official_domain: r.company_domain,
+        }
+      ),
+    }));
 
     res.json({
       jobs,
@@ -148,7 +175,7 @@ export async function listVerifiedJobsHandler(req: Request, res: Response): Prom
     }
 
     const db = getDb();
-    const jobs = await db
+    const rows = await db
       .select({
         id: schema.jobs.id,
         title: schema.jobs.title,
@@ -158,11 +185,13 @@ export async function listVerifiedJobsHandler(req: Request, res: Response): Prom
         status: schema.jobs.status,
         verification_status: schema.jobs.verification_status,
         source_system: schema.jobs.source_system,
+        external_job_id: schema.jobs.external_job_id,
         first_seen_at: schema.jobs.first_seen_at,
         last_verified_at: schema.jobs.last_verified_at,
         official_posted_at: schema.jobs.official_posted_at,
         company_id: schema.jobs.company_id,
         company_name: schema.companies.name,
+        company_domain: schema.companies.official_domain,
       })
       .from(schema.jobs)
       .leftJoin(schema.companies, eq(schema.jobs.company_id, schema.companies.id))
@@ -170,6 +199,27 @@ export async function listVerifiedJobsHandler(req: Request, res: Response): Prom
       .orderBy(desc(schema.jobs.last_verified_at))
       .limit(limit)
       .offset(offset);
+
+    const jobs = rows.map((r) => ({
+      ...r,
+      trustSummary: buildTrustSummary(
+        {
+          id: r.id,
+          status: r.status,
+          verification_status: r.verification_status,
+          source_system: r.source_system,
+          external_job_id: r.external_job_id,
+          official_url: r.official_url,
+          first_seen_at: r.first_seen_at,
+          last_verified_at: r.last_verified_at,
+          official_posted_at: r.official_posted_at,
+        },
+        {
+          name: r.company_name,
+          official_domain: r.company_domain,
+        }
+      ),
+    }));
 
     const responsePayload = {
       jobs,
@@ -210,6 +260,7 @@ export async function getJobByIdHandler(req: Request, res: Response): Promise<vo
       .select({
         job: schema.jobs,
         companyName: schema.companies.name,
+        companyDomain: schema.companies.official_domain,
         companyCareersUrl: schema.companies.careers_url,
       })
       .from(schema.jobs)
@@ -233,6 +284,24 @@ export async function getJobByIdHandler(req: Request, res: Response): Promise<vo
       job.title,
       job.description,
       job.requirements
+    );
+
+    const trustSummary = buildTrustSummary(
+      {
+        id: job.id,
+        status: job.status,
+        verification_status: job.verification_status,
+        source_system: job.source_system,
+        external_job_id: job.external_job_id,
+        official_url: job.official_url,
+        first_seen_at: job.first_seen_at,
+        last_verified_at: job.last_verified_at,
+        official_posted_at: job.official_posted_at,
+      },
+      {
+        name: row.companyName,
+        official_domain: row.companyDomain,
+      }
     );
 
     // Return verification history (audit log) — bounded to the 20 most recent records
@@ -259,6 +328,7 @@ export async function getJobByIdHandler(req: Request, res: Response): Promise<vo
       job: {
         ...job,
         company_name: row.companyName,
+        company_domain: row.companyDomain,
         company_careers_url: row.companyCareersUrl,
         freshness_state: freshness.state,
         freshness_reason: freshness.reason,
@@ -266,6 +336,7 @@ export async function getJobByIdHandler(req: Request, res: Response): Promise<vo
         days_since_verified: freshness.daysSinceVerified,
         experience_classification: parsedExp.classification,
         experience_reason: parsedExp.reason,
+        trustSummary,
       },
       verifications,
     });
@@ -275,5 +346,36 @@ export async function getJobByIdHandler(req: Request, res: Response): Promise<vo
       'getJobByIdHandler error'
     );
     res.status(500).json({ error: 'Failed to fetch job' });
+  }
+}
+
+/**
+ * GET /api/jobs/:id/trust-passport
+ *
+ * Returns the full Opportunity Trust Passport for a job,
+ * evaluating all 6 trust dimensions and transparent statuses.
+ */
+export async function getJobTrustPassportHandler(req: Request, res: Response): Promise<void> {
+  const id = req.params['id'];
+
+  if (!id || typeof id !== 'string' || !/^[0-9a-f-]{36}$/i.test(id)) {
+    res.status(400).json({ error: 'Invalid job ID format' });
+    return;
+  }
+
+  try {
+    const passport = await buildOpportunityTrustPassport(id);
+    if (!passport) {
+      res.status(404).json({ error: 'Job not found' });
+      return;
+    }
+
+    res.json({ passport });
+  } catch (err) {
+    log.error(
+      { id, err: err instanceof Error ? err.message : String(err) },
+      'getJobTrustPassportHandler error'
+    );
+    res.status(500).json({ error: 'Failed to build opportunity trust passport' });
   }
 }

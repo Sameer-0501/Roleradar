@@ -18,6 +18,7 @@ import {
   listJobsHandler,
   listVerifiedJobsHandler,
   getJobByIdHandler,
+  getJobTrustPassportHandler,
 } from './jobs.js';
 import { getMatchedJobsHandler, getTodayMatchedJobsHandler } from './matching.js';
 import { listCompaniesHandler } from './companies.js';
@@ -419,6 +420,10 @@ export function createRouter(): Router {
 
   router.get('/jobs', (req, res) => {
     void listJobsHandler(req, res);
+  });
+
+  router.get('/jobs/:id/trust-passport', (req, res) => {
+    void getJobTrustPassportHandler(req, res);
   });
 
   router.get('/jobs/:id', (req, res) => {

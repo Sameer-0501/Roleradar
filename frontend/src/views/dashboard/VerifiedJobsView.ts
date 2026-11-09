@@ -15,6 +15,7 @@ import {
 } from '../../services/api/index.js';
 import { renderJobCardsSkeleton } from '../../components/SkeletonLoader.js';
 import { debounce } from '../../utils/debounce.js';
+import { openTrustPassportDrawer } from '../../components/TrustPassportDrawer.js';
 import {
   renderSidebar,
   verifiedJobCardHtml,
@@ -325,6 +326,17 @@ export function mountVerifiedJobsView(options: VerifiedJobsViewOptions): Verifie
         openJobDetailModal(jId);
       };
       addTrackedListener(btn, 'click', handleDetail);
+    });
+
+    // Opportunity Trust Passport Action (Engine 1)
+    scopeContainer.querySelectorAll<HTMLElement>('[data-job-passport-id]').forEach((btn) => {
+      const handlePassport = (e: Event) => {
+        e.stopPropagation();
+        const jId = btn.getAttribute('data-job-passport-id');
+        if (!jId || isDestroyed) return;
+        openTrustPassportDrawer(jId, { showToast });
+      };
+      addTrackedListener(btn, 'click', handlePassport);
     });
   };
 

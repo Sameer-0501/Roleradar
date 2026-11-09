@@ -28,6 +28,7 @@ import { evaluateJobRelevance } from './relevance/relevance-service.js';
 import { getDismissedJobIds, getInteractionsBatch } from '../workspace/user-job-service.js';
 import { parseSearchQuery } from '../search/search-parser.js';
 import type { StructuredSearchIntent } from '../search/search-types.js';
+import { buildTrustSummary } from '../trust/trust-passport-service.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('matching-service');
@@ -243,6 +244,7 @@ export async function findMatchesForUser(
       id: schema.jobs.id,
       companyId: schema.jobs.company_id,
       companyName: schema.companies.name,
+      companyDomain: schema.companies.official_domain,
       sourceSystem: schema.jobs.source_system,
       externalJobId: schema.jobs.external_job_id,
       title: schema.jobs.title,
@@ -469,6 +471,25 @@ export async function findMatchesForUser(
       initialVerifiedAt: candidate.initialVerifiedAt ? candidate.initialVerifiedAt.toISOString() : null,
       officialPostedAt: candidate.officialPostedAt ? candidate.officialPostedAt.toISOString() : null,
       experienceClassification: expComp.classification,
+      externalJobId: candidate.externalJobId,
+      companyDomain: candidate.companyDomain,
+      trustSummary: buildTrustSummary(
+        {
+          id: candidate.id,
+          status: candidate.status,
+          verification_status: candidate.verificationStatus,
+          source_system: candidate.sourceSystem,
+          external_job_id: candidate.externalJobId,
+          official_url: candidate.officialUrl,
+          first_seen_at: candidate.firstSeenAt,
+          last_verified_at: candidate.lastVerifiedAt || null,
+          official_posted_at: candidate.officialPostedAt || null,
+        },
+        {
+          name: candidate.companyName,
+          official_domain: candidate.companyDomain,
+        }
+      ),
       matchSummary: summaryParts.join(' · '),
       relevanceScore: finalScore,
       freshnessState: baseRelevance.breakdown.freshness.state,

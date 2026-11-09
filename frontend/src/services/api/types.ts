@@ -158,6 +158,7 @@ export interface Job {
   appliedAt?: string | null;
   matchExplanations?: string[];
   matchSummary?: string | null;
+  trustSummary?: TrustPassportSummary | null;
   interaction?: (JobInteraction & { viewedAt?: string }) | null;
 }
 
@@ -428,4 +429,124 @@ export interface ResumeUploadPayload {
   base64?: string;
   mimeType?: string;
 }
+
+// ── Opportunity Trust Passport (Engine 1) ────────────────────────────────────
+
+export type TransparentPassportStatus =
+  | 'VERIFIED_ACTIVE'
+  | 'VERIFICATION_PENDING'
+  | 'SOURCE_UNAVAILABLE'
+  | 'CLOSED'
+  | 'URL_INVALID'
+  | 'DUPLICATE';
+
+export type FreshnessTier = 'FRESH' | 'RECENT' | 'AGING' | 'STALE';
+
+export type DomainMatchType =
+  | 'PRIMARY_OFFICIAL_DOMAIN'
+  | 'WHITELISTED_ALTERNATE_DOMAIN'
+  | 'INVALID';
+
+export type DisclosureState = 'EMPLOYER_DISCLOSED' | 'UNSTATED_BY_EMPLOYER';
+
+export interface EmployerProvenanceDimension {
+  companyName: string;
+  officialDomain: string;
+  careersUrl: string;
+  atsProvider: string;
+  allowedAlternateDomains: string[];
+  provenanceVerified: boolean;
+}
+
+export interface VacancyFreshnessDimension {
+  officialPostedAt: string | null;
+  firstDiscoveredAt: string;
+  lastVerifiedAt: string | null;
+  freshnessTier: FreshnessTier;
+  explanation: string;
+}
+
+export interface ApplicationUrlIntegrityDimension {
+  officialApplicationUrl: string;
+  hostname: string;
+  protocolHttps: boolean;
+  domainMatchType: DomainMatchType;
+  validationReason?: string;
+  isValid: boolean;
+}
+
+export interface RequisitionIdentityDimension {
+  externalJobId: string;
+  sourceSystem: string;
+  canonicalIdentityKey: string;
+  deduplicationVerified: boolean;
+}
+
+export interface VerificationEvent {
+  id: string;
+  checkedAt: string;
+  domainCheck: boolean | null;
+  jobExistsCheck: boolean | null;
+  jobIdCheck: boolean | null;
+  titleCheck: boolean | null;
+  locationCheck: boolean | null;
+  statusCheck: boolean | null;
+  applyUrlCheck: boolean | null;
+  verificationScore: number | null;
+  failureReason: string | null;
+}
+
+export interface AvailabilityEvidenceDimension {
+  currentStatus: TransparentPassportStatus;
+  statusReason: string;
+  verificationHistory: VerificationEvent[];
+  partialScanProtected: boolean;
+  lastConfirmedActiveAt: string | null;
+}
+
+export interface FieldDisclosure {
+  status: DisclosureState;
+  value: string | null;
+  note?: string;
+}
+
+export interface JobDetailCompletenessDimension {
+  location: FieldDisclosure;
+  workplaceType: FieldDisclosure;
+  experienceLevel: FieldDisclosure;
+  roleCategory: FieldDisclosure;
+  compensation: FieldDisclosure;
+  transparencyFlags: string[];
+}
+
+export interface TrustPassportSummary {
+  passportStatus: TransparentPassportStatus;
+  atsProvider: string;
+  externalJobId: string;
+  lastVerifiedAt: string | null;
+  domainMatchType: DomainMatchType;
+  freshnessTier: FreshnessTier;
+  hostname: string;
+  isUrlValid: boolean;
+}
+
+export interface OpportunityTrustPassport {
+  jobId: string;
+  passportStatus: TransparentPassportStatus;
+  summary: TrustPassportSummary;
+  dimensions: {
+    employerProvenance: EmployerProvenanceDimension;
+    vacancyFreshness: VacancyFreshnessDimension;
+    applicationUrlIntegrity: ApplicationUrlIntegrityDimension;
+    requisitionIdentity: RequisitionIdentityDimension;
+    availabilityEvidence: AvailabilityEvidenceDimension;
+    jobDetailCompleteness: JobDetailCompletenessDimension;
+  };
+  generatedAt: string;
+}
+
+export interface TrustPassportResponse {
+  passport: OpportunityTrustPassport;
+}
+
 

@@ -8,6 +8,7 @@
 
 import { apiClient as defaultApiClient } from '../modules/preferences-client.js';
 import { showToast as defaultShowToast } from '../services/ui/toast.js';
+import { openTrustPassportDrawer } from './TrustPassportDrawer.js';
 
 export type JobModalStateChangeCallback = (
   action: 'save' | 'apply' | 'dismiss' | 'note' | 'status' | string,
@@ -437,7 +438,10 @@ export async function openJobDetailModal(
             fitSectionHtml +
             assistantSectionHtml +
             '<div class="modal-section">' +
-              '<h3 class="modal-section-title">🛡️ Official Verification Audit</h3>' +
+              '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">' +
+                '<h3 class="modal-section-title" style="margin:0;">🛡️ Official Verification Audit</h3>' +
+                '<button type="button" class="kn-btn kn-btn--secondary" id="btn-modal-open-passport" style="font-size:0.8rem; padding:4px 10px;">Inspect Trust Passport 🛡️</button>' +
+              '</div>' +
               '<div class="modal-verif-box">' + verifListHtml + '</div>' +
             '</div>' +
             notesSectionHtml +
@@ -471,6 +475,14 @@ export async function openJobDetailModal(
     if (newBackdrop) {
       newBackdrop.addEventListener('click', (e) => {
         if (e.target === newBackdrop) closeModal();
+      }, { signal: abortController.signal });
+    }
+
+    // Modal Trust Passport Inspection
+    const modalPassportBtn = document.getElementById('btn-modal-open-passport');
+    if (modalPassportBtn) {
+      modalPassportBtn.addEventListener('click', () => {
+        openTrustPassportDrawer(jobId, { showToast });
       }, { signal: abortController.signal });
     }
 

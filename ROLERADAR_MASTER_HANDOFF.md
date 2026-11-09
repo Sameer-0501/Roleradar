@@ -17,13 +17,13 @@ All prior informal status logs, speculative markdown claims, and interim scratch
 
 ## 2. Current Phase and Roadmap Position
 
-* **Current Active Phase:** **Product Foundation Gate (Blueprint Section 14 & Section 19)** — `COMPLETED`.
+* **Current Active Phase:** **Product Release 1A (Engine 1: Opportunity Trust Passport)** — `COMPLETED`.
 * **Prior Source Expansion:** **Phase 20.5 (Controlled Workday Source Expansion)** — Formally `PAUSED` after Batch 8 admission.
-* **Next Approved Milestone:** **Product Release 1A (P0 — Engine 1: Opportunity Trust Passport)** — Awaiting explicit user approval before execution.
+* **Next Approved Milestone:** **Product Release 1B (P0 — Engine 2: Proof-Based Job Fit / RoleRadar Job Fit Intelligence)** — Awaiting explicit user approval before execution.
 
 ```
-[Phase 20.5 Workday Expansion Batches 1-8]  ──► [Section 19 Reconciliation & Handoff] ──► [Product Release 1A: Trust Passport]
-              (COMPLETED & PAUSED)                              (COMPLETED TODAY)                            (NEXT APPROVED TASK)
+[Phase 20.5 Workday Expansion Batches 1-8] ──► [Section 19 Reconciliation] ──► [Product Release 1A: Trust Passport] ──► [Product Release 1B: Job Fit Intelligence]
+              (COMPLETED & PAUSED)                           (COMPLETED)                           (COMPLETED)                               (NEXT APPROVED TASK)
 ```
 
 ---
@@ -34,6 +34,8 @@ Every commit on `main` has been forensically verified via `git log`, `git show -
 
 | Commit Hash | Commit Title | Affected Core Files | Maturity Classification | Evidence & Status |
 | :--- | :--- | :--- | :--- | :--- |
+| Pending | `feat(trust): implement Engine 1 Opportunity Trust Passport and forensic inspector` | `trust-passport-service.ts`, `jobs.ts`, `router.ts`, `matching-*`, `TrustPassportDrawer.ts`, `trust-passport.css`, views | `PRODUCTION-READY` | Deterministic 6-dimension Trust Passport service, 6 transparent statuses, API projections, and frontend inspector. |
+| `71e9f17` | `docs(blueprint): establish Product Master Blueprint and verified Master Handoff` | `ROLERADAR_PRODUCT_MASTER_BLUEPRINT.md`, `ROLERADAR_MASTER_HANDOFF.md` | `PRODUCTION-READY` | Established four-document governance structure and ground truth baseline. |
 | `2520b73` | `docs: enforce mandatory pre-execution blueprint and strategy alignment check` | `docs/AGENTS.md`, `docs/RR_PRODUCT_MASTER_BLUEPRINT.md` | `PRODUCTION-READY` | Pre-execution safety rule active across agent adapters. |
 | `541c790` | `docs: establish RoleRadar Product Master Blueprint (RR-PRODUCT-MASTER-BLUEPRINT-001)` | `docs/RR_PRODUCT_MASTER_BLUEPRINT.md` | `PRODUCTION-READY` | Comprehensive 5-engine product specification committed. |
 | `0f36788` | `till workday batch 8` | `backend/src/notifications/*`, `probe-workday-batch6.ts`, `workday-batch6-integration.test.ts`, reports | `VERIFIED` | Batch 6 probe/test suite and digest idempotency retry fixes committed. |
@@ -138,13 +140,19 @@ All verification suites executed on November 9, 2026 passed with **0 errors**:
 
 ### 6.4 Frontend Production Build
 * **Command:** `npm --prefix frontend run build`
-* **Result:** **Exit code 0**, 2,438 modules transformed, built in 8.24s.
+* **Result:** **Exit code 0**, 2,440 modules transformed, built in 41.32s.
 * **Output Assets:**
   * `dist/index.html`: 4.03 kB (gzip: 1.51 kB)
-  * `dist/assets/index-D-0f_6JT.css`: 154.00 kB (gzip: 27.29 kB)
+  * `dist/assets/index-DZjpizi0.css`: 162.94 kB (gzip: 28.87 kB)
   * `dist/assets/vendor-react-BhCj5pxB.js`: 217.34 kB (gzip: 69.89 kB)
   * `dist/assets/vendor-charts-Cp1LghQS.js`: 317.59 kB (gzip: 95.18 kB)
-  * `dist/assets/index-wK54b9Ot.js`: 325.62 kB (gzip: 83.07 kB)
+  * `dist/assets/index-BKwfR9G2.js`: 340.85 kB (gzip: 86.60 kB)
+
+### 6.5 Opportunity Trust Passport Engine 1 Suite
+* **Command:** `Set-Location backend; npx vitest run src/tests/opportunity-trust-passport.test.ts src/tests/digest-concurrency-integration.test.ts src/tests/url-validator.test.ts src/tests/adobe-dual-domain-provenance.test.ts src/tests/apply-action-semantics.test.ts`
+* **Result:** **5 test files passed (5/5), 71 tests passed (71/71)**
+* **Execution Duration:** 3.90s
+* **Coverage:** Deterministic 6-dimension evaluation, 6 transparent opportunity statuses, partial-scan protection against premature closure, unstated compensation/freshness transparency, alternate-domain provenance validation, API batch and detail projections, non-destructive synthetic test fixture isolation.
 
 ---
 
@@ -173,7 +181,7 @@ Every future phase, feature, or adapter must strictly comply with `docs/ENGINEER
 * **Credentials & Secrets Boundary:**
   * Zero credentials, API tokens, passwords, or personal data may be stored in code or repository logs.
 * **Scope Boundary:**
-  * No product features from Product Release 1 may be implemented until this Section 19 reconciliation gate is fully approved.
+  * No product features from Product Release 1B or later may be implemented until explicitly authorized.
 
 ---
 
@@ -183,7 +191,8 @@ Every future phase, feature, or adapter must strictly comply with `docs/ENGINEER
    * *Status:* Formally **PAUSED** after Batch 8.
    * *Future Pipeline:* Batch 9+ candidate discovery (Workday, SmartRecruiters, SAP, Taleo) queued for future phases. 64 Workday sources provide sufficient scale for Product Releases 1–7.
 2. **Product Roadmap Execution Queue:**
-   * **Product Release 1:** Opportunity Trust Passport & Proof-Based Job Fit (Engines 1 & 2).
+   * **Product Release 1A:** Opportunity Trust Passport (Engine 1) — `COMPLETED`.
+   * **Product Release 1B:** Proof-Based Job Fit / RoleRadar Job Fit Intelligence (Engine 2).
    * **Product Release 2:** Master Career Evidence Profile & Claim Provenance (Engine 3).
    * **Product Release 3:** Targeted Resume Studio & Role Relevance Auditing (Engine 3).
    * **Product Release 4:** Adaptive Skill Diagnostic & Fresher Project Readiness (Engine 4).
@@ -199,19 +208,19 @@ Every future phase, feature, or adapter must strictly comply with `docs/ENGINEER
 
 ## 10. Single Next Approved Task
 
-### **Task: Product Release 1A (P0 — Engine 1: Opportunity Trust Passport)**
+### **Task: Product Release 1B (P0 — Engine 2: Proof-Based Job Fit / RoleRadar Job Fit Intelligence)**
 
 **Core Objective:**  
-Implement the first half of Product Release 1: the **Opportunity Trust Passport** (Engine 1), transforming raw job listings into verified, provenance-backed career opportunities.
+Implement Engine 2 (**Proof-Based Job Fit / RoleRadar Job Fit Intelligence**) to replace opaque ATS percentage match scores with an explainable, requirement-by-requirement evaluation grounded in verified candidate evidence, in strict compliance with `ROLERADAR_PRODUCT_MASTER_BLUEPRINT.md` (Section 5) and `docs/ENGINEERING_STANDARDS.md`.
 
-**Scope of Implementation (Release 1A):**
-1. **Trust Passport Data Model:** Add trust dimension evaluation schema to PostgreSQL (`freshness_score`, `source_authenticity_score`, `application_transparency_score`, `role_detail_score`, `employer_verification_score`, `overall_trust_score`).
-2. **Deterministic Trust Scoring Engine:** Implement deterministic scoring calculator evaluating the 6 dimensions defined in Blueprint Section 4.
-3. **Transparent Opportunity Statuses:** Enforce the 6 explicit status states: `VERIFIED ACTIVE`, `VERIFICATION PENDING`, `SOURCE UNAVAILABLE`, `CLOSED`, `URL INVALID`, `DUPLICATE`.
-4. **Verification History & Provenance:** Provide chronological verification audit trail (when checked, HTTP response code, canonical ATS destination URL, last confirmed active).
-5. **UI Trust Passport Component & Drawer:** Build frontend React badge, confidence pill, and expandable Trust Passport inspection drawer displaying exact verification provenance and freshness timestamp.
-6. **Verification & Acceptance:** Vitest unit/integration tests for trust scoring and API endpoints; `tsc --noEmit` exit 0; frontend build exit 0.
+**Scope of Implementation (Release 1B):**
+1. **Requirement Atomizer & Categorizer:** Parse and structure job description requirements into atomic criteria (must-have skills, preferred skills, domain experience, education/credentials) without LLM hallucinations.
+2. **Deterministic Match Scoring Engine:** Compute transparent qualification alignment across candidate skills, projects, and career evidence, categorizing criteria into: `VERIFIED MET`, `PARTIALLY MET`, `UNMET / GAP`, and `UNSTATED`.
+3. **Missing Requirement Gap Analysis:** For every gap or unmet requirement, generate an actionable bridge strategy (e.g., specific project recommendations, targeted learning modules, diagnostic assessments).
+4. **API Integration:** Expose `GET /api/jobs/:id/fit-analysis` projecting the granular fit breakdown, while embedding lightweight match summaries in existing candidate job feeds.
+5. **UI Proof-Based Job Fit Drawer & Indicators:** Build frontend React components: match category breakdown pill, requirement audit cards, evidence link badges, and gap resolution recommendations.
+6. **Empirical Verification & Testing:** Comprehensive Vitest unit and integration test suite asserting deterministic match calculation, gap identification, synthetic candidate profile fixture teardown, `tsc --noEmit` exit 0, and frontend build exit 0.
 
 > [!IMPORTANT]
 > **Execution Gate:**  
-> This task is currently **AWAITING USER AUTHORIZATION**. Do not begin implementation of Product Release 1A until the user reviews this Section 19 reconciliation and gives explicit approval to proceed.
+> This task is currently **AWAITING USER AUTHORIZATION**. Do not begin implementation of Product Release 1B until the user reviews this handoff and gives explicit approval to proceed.

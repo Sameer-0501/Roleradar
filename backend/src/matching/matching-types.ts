@@ -8,6 +8,7 @@
 import type { ExperienceLevel } from '../preferences/taxonomy.js';
 export type { ExperienceLevel };
 import type { FreshnessState, RelevanceBreakdown } from './relevance/relevance-types.js';
+import type { TrustPassportSummary } from '../trust/trust-passport-service.js';
 
 export type MatchDecision = 'MATCH' | 'NO_MATCH' | 'UNKNOWN';
 
@@ -79,6 +80,7 @@ export interface CandidateJobData {
   id: string;
   companyId: string;
   companyName: string;
+  companyDomain?: string | null;
   sourceSystem: string;
   externalJobId: string;
   title: string;
@@ -134,6 +136,9 @@ export interface MatchedJobDto {
   breakdown?: RelevanceBreakdown;
   description?: string | null;
   requirements?: string | null;
+  externalJobId?: string | null;
+  companyDomain?: string | null;
+  trustSummary?: TrustPassportSummary | null;
   interaction?: {
     isSaved: boolean;
     savedAt: string | null;

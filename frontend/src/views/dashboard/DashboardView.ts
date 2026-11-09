@@ -18,10 +18,11 @@ import {
 } from '../../services/api/index.js';
 import { renderDashboardPreferencesSummary } from '../../modules/onboarding/onboarding-ui.js';
 import { openJobDetailModal } from '../../components/JobDetailModal.js';
+import { openTrustPassportDrawer } from '../../components/TrustPassportDrawer.js';
 import { showToast as defaultShowToast } from '../../services/ui/toast.js';
 import { renderJobCardsSkeleton, renderMetricsSkeleton } from '../../components/SkeletonLoader.js';
 
-export { openJobDetailModal };
+export { openJobDetailModal, openTrustPassportDrawer };
 
 export interface DashboardViewOptions {
   container: HTMLElement;
@@ -217,6 +218,40 @@ export function verifiedJobCardHtml(job: Job, options: { context?: string; showV
 
   const cardClass = 'vjc' + (isClosed ? ' vjc--closed' : '');
 
+  // Engine 1: Opportunity Trust Passport Strip
+  const trustSummary = job.trustSummary;
+  const passportStatus = trustSummary?.passportStatus || (isClosed ? 'CLOSED' : 'VERIFIED_ACTIVE');
+  const atsProvider = trustSummary?.atsProvider || source || 'DIRECT_ATS';
+  const reqId = trustSummary?.externalJobId || displayJobId;
+  let verifiedHost = trustSummary?.hostname || '';
+  if (!verifiedHost && rawOfficialUrl !== '#') {
+    try { verifiedHost = new URL(rawOfficialUrl).hostname; } catch (e) {}
+  }
+
+  let statusBadgeClass = 'vjc__trust-status-badge--active';
+  let statusBadgeText = '🛡️ VERIFIED ACTIVE';
+  if (passportStatus === 'CLOSED') {
+    statusBadgeClass = 'vjc__trust-status-badge--closed';
+    statusBadgeText = '🚫 CLOSED';
+  } else if (passportStatus === 'SOURCE_UNAVAILABLE') {
+    statusBadgeClass = 'vjc__trust-status-badge--unavailable';
+    statusBadgeText = '⚠️ SOURCE UNAVAILABLE';
+  } else if (passportStatus === 'VERIFICATION_PENDING') {
+    statusBadgeClass = 'vjc__trust-status-badge--pending';
+    statusBadgeText = '⏳ PENDING';
+  }
+
+  const trustStripHtml = (
+    '<div class="vjc__trust-strip">' +
+      '<div class="vjc__trust-strip-left">' +
+        '<span class="vjc__trust-status-badge ' + statusBadgeClass + '">' + statusBadgeText + '</span>' +
+        '<span class="vjc__trust-req-pill">' + escapeHtml(atsProvider) + (reqId ? ' • ' + escapeHtml(reqId) : '') + '</span>' +
+        (verifiedHost ? '<span class="vjc__trust-host">🔗 ' + escapeHtml(verifiedHost) + '</span>' : '') +
+      '</div>' +
+      '<button type="button" class="vjc__trust-btn" data-job-passport-id="' + escapeHtml(job.id) + '" title="Inspect 6-Dimension Opportunity Trust Passport">🛡️ Trust Passport</button>' +
+    '</div>'
+  );
+
   return (
     '<article class="' + cardClass + '" id="job-card-' + escapeHtml(job.id) + '">' +
       '<div class="vjc__header">' +
@@ -239,6 +274,7 @@ export function verifiedJobCardHtml(job: Job, options: { context?: string; showV
         (savedAtStr && context === 'saved' ? '<span class="vjc__detected">Saved ' + savedAtStr + '</span>' : '') +
         (appliedAtStr && context === 'applications' ? '<span class="vjc__detected">Applied ' + appliedAtStr + '</span>' : '') +
       '</div>' +
+      trustStripHtml +
       closedWarningHtml +
       notesPreviewHtml +
       explanationsHtml +
@@ -587,6 +623,18 @@ export function mountDashboardView(options: DashboardViewOptions): DashboardView
         }
       };
       addTrackedListener(btn, 'click', handleDetail);
+    });
+
+    // Opportunity Trust Passport Drawer Action (Engine 1)
+    scopeContainer.querySelectorAll<HTMLElement>('[data-job-passport-id]').forEach(function (btn) {
+      const handlePassport = (e: Event) => {
+        e.stopPropagation();
+        const jId = btn.getAttribute('data-job-passport-id');
+        if (jId && !isDestroyed) {
+          openTrustPassportDrawer(jId, { showToast });
+        }
+      };
+      addTrackedListener(btn, 'click', handlePassport);
     });
   };
 
