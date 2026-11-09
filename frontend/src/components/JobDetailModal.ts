@@ -9,6 +9,7 @@
 import { apiClient as defaultApiClient } from '../modules/preferences-client.js';
 import { showToast as defaultShowToast } from '../services/ui/toast.js';
 import { openTrustPassportDrawer } from './TrustPassportDrawer.js';
+import { openJobFitDrawer } from './JobFitDrawer.js';
 
 export type JobModalStateChangeCallback = (
   action: 'save' | 'apply' | 'dismiss' | 'note' | 'status' | string,
@@ -438,9 +439,12 @@ export async function openJobDetailModal(
             fitSectionHtml +
             assistantSectionHtml +
             '<div class="modal-section">' +
-              '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">' +
-                '<h3 class="modal-section-title" style="margin:0;">🛡️ Official Verification Audit</h3>' +
-                '<button type="button" class="kn-btn kn-btn--secondary" id="btn-modal-open-passport" style="font-size:0.8rem; padding:4px 10px;">Inspect Trust Passport 🛡️</button>' +
+              '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">' +
+                '<h3 class="modal-section-title" style="margin:0;">🛡️ Official Verification & Fit</h3>' +
+                '<div style="display:flex; gap:8px;">' +
+                  '<button type="button" class="kn-btn kn-btn--secondary" id="btn-modal-open-passport" style="font-size:0.8rem; padding:4px 10px;">Inspect Trust Passport 🛡️</button>' +
+                  '<button type="button" class="rr-fit-btn" id="btn-modal-open-fit" style="font-size:0.8rem; padding:4px 10px;">Fit Intelligence 🎯</button>' +
+                '</div>' +
               '</div>' +
               '<div class="modal-verif-box">' + verifListHtml + '</div>' +
             '</div>' +
@@ -483,6 +487,14 @@ export async function openJobDetailModal(
     if (modalPassportBtn) {
       modalPassportBtn.addEventListener('click', () => {
         openTrustPassportDrawer(jobId, { showToast });
+      }, { signal: abortController.signal });
+    }
+
+    // Modal Proof-Based Fit Inspection (Engine 2)
+    const modalFitBtn = document.getElementById('btn-modal-open-fit');
+    if (modalFitBtn) {
+      modalFitBtn.addEventListener('click', () => {
+        openJobFitDrawer(jobId, { showToast });
       }, { signal: abortController.signal });
     }
 

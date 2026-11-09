@@ -14,6 +14,8 @@ import type {
   SearchSuggestionItem,
   OpportunityTrustPassport,
   TrustPassportResponse,
+  ProofBasedJobFitAnalysis,
+  ProofFitResponse,
 } from './types.js';
 
 export const jobsService = {
@@ -70,6 +72,31 @@ export const jobsService = {
   async getTrustPassport(jobId: string): Promise<OpportunityTrustPassport> {
     const res = await httpClient.get<TrustPassportResponse>(`/jobs/${encodeURIComponent(jobId)}/trust-passport`);
     return res.passport;
+  },
+
+  /**
+   * Retrieves the explainable Proof-Based Job Fit analysis (Engine 2) for a job.
+   */
+  async getJobProofFit(jobId: string): Promise<ProofBasedJobFitAnalysis> {
+    const res = await httpClient.get<ProofFitResponse>(`/jobs/${encodeURIComponent(jobId)}/proof-fit`);
+    return res.fitAnalysis;
+  },
+
+  /**
+   * Saves candidate requirement disputes or profile clarifications (Engine 2).
+   */
+  async saveJobFitControls(
+    jobId: string,
+    controls: {
+      disputedRequirements?: Array<{ requirementId: string; reason: string; candidateNote?: string }>;
+      suppliedClarifications?: Array<{ requirementId: string; clarification: string; value?: string }>;
+    }
+  ): Promise<ProofBasedJobFitAnalysis> {
+    const res = await httpClient.post<ProofFitResponse>(
+      `/jobs/${encodeURIComponent(jobId)}/proof-fit/controls`,
+      controls
+    );
+    return res.fitAnalysis;
   },
 
   /**

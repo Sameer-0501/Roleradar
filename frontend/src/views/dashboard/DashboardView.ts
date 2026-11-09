@@ -19,10 +19,11 @@ import {
 import { renderDashboardPreferencesSummary } from '../../modules/onboarding/onboarding-ui.js';
 import { openJobDetailModal } from '../../components/JobDetailModal.js';
 import { openTrustPassportDrawer } from '../../components/TrustPassportDrawer.js';
+import { openJobFitDrawer } from '../../components/JobFitDrawer.js';
 import { showToast as defaultShowToast } from '../../services/ui/toast.js';
 import { renderJobCardsSkeleton, renderMetricsSkeleton } from '../../components/SkeletonLoader.js';
 
-export { openJobDetailModal, openTrustPassportDrawer };
+export { openJobDetailModal, openTrustPassportDrawer, openJobFitDrawer };
 
 export interface DashboardViewOptions {
   container: HTMLElement;
@@ -248,7 +249,10 @@ export function verifiedJobCardHtml(job: Job, options: { context?: string; showV
         '<span class="vjc__trust-req-pill">' + escapeHtml(atsProvider) + (reqId ? ' • ' + escapeHtml(reqId) : '') + '</span>' +
         (verifiedHost ? '<span class="vjc__trust-host">🔗 ' + escapeHtml(verifiedHost) + '</span>' : '') +
       '</div>' +
-      '<button type="button" class="vjc__trust-btn" data-job-passport-id="' + escapeHtml(job.id) + '" title="Inspect 6-Dimension Opportunity Trust Passport">🛡️ Trust Passport</button>' +
+      '<div class="vjc__trust-strip-actions">' +
+        '<button type="button" class="vjc__trust-btn" data-job-passport-id="' + escapeHtml(job.id) + '" title="Inspect 6-Dimension Opportunity Trust Passport">🛡️ Trust Passport</button>' +
+        '<button type="button" class="rr-fit-btn" data-job-fit-id="' + escapeHtml(job.id) + '" title="Inspect Proof-Based Job Fit Intelligence">🎯 Fit Intelligence</button>' +
+      '</div>' +
     '</div>'
   );
 
@@ -635,6 +639,18 @@ export function mountDashboardView(options: DashboardViewOptions): DashboardView
         }
       };
       addTrackedListener(btn, 'click', handlePassport);
+    });
+
+    // Proof-Based Job Fit Intelligence Drawer Action (Engine 2)
+    scopeContainer.querySelectorAll<HTMLElement>('[data-job-fit-id]').forEach(function (btn) {
+      const handleFit = (e: Event) => {
+        e.stopPropagation();
+        const jId = btn.getAttribute('data-job-fit-id');
+        if (jId && !isDestroyed) {
+          openJobFitDrawer(jId, { showToast });
+        }
+      };
+      addTrackedListener(btn, 'click', handleFit);
     });
   };
 

@@ -16,6 +16,7 @@ import {
 import { renderJobCardsSkeleton } from '../../components/SkeletonLoader.js';
 import { debounce } from '../../utils/debounce.js';
 import { openTrustPassportDrawer } from '../../components/TrustPassportDrawer.js';
+import { openJobFitDrawer } from '../../components/JobFitDrawer.js';
 import {
   renderSidebar,
   verifiedJobCardHtml,
@@ -337,6 +338,17 @@ export function mountVerifiedJobsView(options: VerifiedJobsViewOptions): Verifie
         openTrustPassportDrawer(jId, { showToast });
       };
       addTrackedListener(btn, 'click', handlePassport);
+    });
+
+    // Proof-Based Job Fit Action (Engine 2)
+    scopeContainer.querySelectorAll<HTMLElement>('[data-job-fit-id]').forEach((btn) => {
+      const handleFit = (e: Event) => {
+        e.stopPropagation();
+        const jId = btn.getAttribute('data-job-fit-id');
+        if (!jId || isDestroyed) return;
+        openJobFitDrawer(jId, { showToast });
+      };
+      addTrackedListener(btn, 'click', handleFit);
     });
   };
 

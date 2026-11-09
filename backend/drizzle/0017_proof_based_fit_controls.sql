@@ -3,3 +3,4 @@
 
 ALTER TABLE "user_job_interactions"
   ADD COLUMN IF NOT EXISTS "fit_controls" jsonb DEFAULT '{}'::jsonb;
+

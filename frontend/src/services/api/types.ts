@@ -549,4 +549,126 @@ export interface TrustPassportResponse {
   passport: OpportunityTrustPassport;
 }
 
+// ── Proof-Based Job Fit (Engine 2 — Blueprint Section 5) ─────────────────────
+
+export type OverallEligibilityStatus =
+  | 'ELIGIBLE'
+  | 'ELIGIBILITY_CONCERN_DETECTED'
+  | 'NEEDS_PROFILE_COMPLETION';
+
+export type AssessmentState =
+  | 'SUPPORTED'
+  | 'PARTIALLY_SUPPORTED'
+  | 'NOT_SUPPORTED'
+  | 'UNKNOWN'
+  | 'HARD_ELIGIBILITY_CONCERN'
+  | 'NOT_APPLICABLE';
+
+export type EvidenceSource =
+  | 'PROJECT'
+  | 'EXPERIENCE'
+  | 'EDUCATION'
+  | 'CERTIFICATION'
+  | 'PROFILE_SKILL'
+  | 'PREFERENCE'
+  | 'CLARIFICATION';
+
+export type RequirementGroup = 'MANDATORY' | 'PREFERRED' | 'RESPONSIBILITY' | 'CONDITION';
+
+export type RequirementCategory =
+  | 'EDUCATION'
+  | 'EXPERIENCE'
+  | 'TECHNICAL_SKILL'
+  | 'CERTIFICATION'
+  | 'LOCATION'
+  | 'WORKPLACE_TYPE'
+  | 'DOMAIN_KNOWLEDGE';
+
+export interface RequirementEvaluation {
+  id: string;
+  group: RequirementGroup;
+  category: RequirementCategory;
+  originalText: string;
+  extractedCriterion: string;
+  assessmentState: AssessmentState;
+  evidenceSource?: EvidenceSource;
+  evidenceSummary?: string;
+  isDisputed?: boolean;
+  disputeReason?: string;
+  candidateNote?: string;
+  candidateClarification?: string;
+}
+
+export interface EmploymentConditions {
+  workLocation: string | null;
+  workplaceMode: 'ONSITE' | 'HYBRID' | 'REMOTE' | 'UNKNOWN';
+  countryBoundary: string | null;
+  contractType: string | null;
+  disclosedSalary: {
+    status: 'EMPLOYER_DISCLOSED' | 'UNSTATED_BY_EMPLOYER';
+    rawCompensation: string | null;
+    note?: string;
+  };
+}
+
+export interface EligibilityBlocker {
+  requirementId: string;
+  criterion: string;
+  candidateReality: string;
+  reason: string;
+}
+
+export interface LearnableSkillGap {
+  requirementId: string;
+  skillName: string;
+  importance: 'MANDATORY' | 'PREFERRED';
+  recommendedAction: string;
+}
+
+export interface UnknownItem {
+  requirementId: string;
+  criterion: string;
+  missingField: string;
+  actionPrompt: string;
+}
+
+export interface CandidateFitControls {
+  disputedRequirements?: Array<{
+    requirementId: string;
+    reason: string;
+    candidateNote?: string;
+    disputedAt?: string;
+  }>;
+  suppliedClarifications?: Array<{
+    requirementId: string;
+    clarification: string;
+    value?: string;
+    suppliedAt?: string;
+  }>;
+}
+
+export interface ProofBasedJobFitAnalysis {
+  jobId: string;
+  userId: string;
+  overallEligibilityStatus: OverallEligibilityStatus;
+  mandatoryEvaluations: RequirementEvaluation[];
+  preferredEvaluations: RequirementEvaluation[];
+  responsibilities: string[];
+  employmentConditions: EmploymentConditions;
+  eligibilityBlockers: EligibilityBlocker[];
+  learnableSkillGaps: LearnableSkillGap[];
+  unknownItems: UnknownItem[];
+  candidateControlsApplied: {
+    disputesCount: number;
+    clarificationsCount: number;
+  };
+  generatedAt: string;
+}
+
+export interface ProofFitResponse {
+  fitAnalysis: ProofBasedJobFitAnalysis;
+  message?: string;
+}
+
+
 
