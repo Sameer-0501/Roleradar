@@ -149,34 +149,20 @@ class JobScheduler {
         void this.runScan(job);
       }, startupDelay);
 
-      // 2. Register the normal recurring interval
+      // 2. Register the recurring scan interval
       const handle = setInterval(() => {
         void this.runScan(job);
       }, job.intervalMs);
 
-      // 3. Queue a staggered startup recent sweep (after all normal startup scans)
-      const recentStartupDelay = (recentSweepBaseSlot + startupIndex) * STARTUP_STAGGER_MS;
-      setTimeout(() => {
-        void this.runRecentSweep(job);
-      }, recentStartupDelay);
-
-      // 4. Register the recent sweep recurring interval (same cadence as normal scan)
-      const recentHandle = setInterval(() => {
-        void this.runRecentSweep(job);
-      }, job.intervalMs);
-
       this.jobs.set(name, { ...job, handle });
-      // Store the recent sweep handle on a weakly-associated timer list
-      this._recentSweepHandles.set(name, recentHandle);
 
       log.info(
         {
           name,
           intervalMinutes: job.intervalMs / 60_000,
           startupDelayMs: startupDelay,
-          recentSweepStartupDelayMs: recentStartupDelay,
         },
-        'SCAN_STARTED scheduled (startup scan + recent sweep queued with stagger)'
+        'SCAN_STARTED scheduled (startup scan queued with stagger, inline recent-sweep enabled)'
       );
       startupIndex++;
     }
@@ -350,6 +336,24 @@ class JobScheduler {
           const stats = await runPipeline(candidates, job.companyId, job.sourceConfig, isCompleteScan);
           jobsVerified = stats.verified;
           jobsRejected = stats.failed + stats.skipped;
+
+          // Inline Recent-Source Sweep (Master Plan OPT-3):
+          // Seamlessly evaluates recent postings using the authoritative discovery results
+          // already in memory from this scan cycle. Eliminates redundant duplicate ATS HTTP downloads.
+          try {
+            await runRecentSourceSweep(
+              job.collector,
+              job.companyId,
+              job.sourceConfig,
+              { windowDays: config.recentJobWindowDays },
+              candidates
+            );
+          } catch (sweepErr) {
+            log.error(
+              { source: job.name, err: sweepErr instanceof Error ? sweepErr.message : String(sweepErr) },
+              'RECENT_SWEEP_INLINE_ERROR error during inline recent sweep'
+            );
+          }
         } else if (!job.companyId || !job.sourceConfig) {
           log.warn(
             { source: job.name },
@@ -448,7 +452,11 @@ class JobScheduler {
    * briefly-failing source during backoff would be noisy. The normal scan
    * backoff already protects the source; we simply skip if locked.
    */
-  private async runRecentSweep(job: ScheduledJob): Promise<void> {
+  /**
+   * Run recent-source sweep for a collector.
+   * Accepts optional preDiscoveredCandidates to avoid redundant ATS HTTP discovery.
+   */
+  async runRecentSweep(job: ScheduledJob, preDiscoveredCandidates?: JobCandidate[]): Promise<void> {
     if (!job.companyId || !job.sourceConfig) {
       // No pipeline config — can't run sweep
       return;
@@ -471,7 +479,8 @@ class JobScheduler {
         job.collector,
         job.companyId,
         job.sourceConfig,
-        { windowDays: config.recentJobWindowDays }
+        { windowDays: config.recentJobWindowDays },
+        preDiscoveredCandidates
       );
       log.info(
         {

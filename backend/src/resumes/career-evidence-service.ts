@@ -30,6 +30,13 @@ export type VerifiedStatus =
   | 'ASSESSMENT_SUPPORTED'
   | 'EXTERNALLY_VERIFIED';
 
+export interface SyncEvidenceResult {
+  syncedCount: number;
+  updatedCount: number;
+  alreadyUpToDateCount: number;
+  totalActiveClaims: number;
+}
+
 export interface CareerProfileDto {
   id: string;
   userId: string;
@@ -280,7 +287,7 @@ export async function deleteCandidateEvidence(userId: string, evidenceId: string
  * Synchronizes existing structured profile items (projects, experiences, skills, education)
  * into candidate_evidence records if not already represented.
  */
-export async function syncProfileToEvidence(userId: string): Promise<number> {
+export async function syncProfileToEvidence(userId: string): Promise<SyncEvidenceResult> {
   const db = getDb();
 
   const [skills, projects, experiences, educations, certs, existingEvidence] = await Promise.all([
@@ -390,7 +397,51 @@ export async function syncProfileToEvidence(userId: string): Promise<number> {
     }
   }
 
-  return addedCount;
+  // 6. Prune orphaned evidence claims whose source profile reference no longer exists
+  const validReferenceIds = new Set<string>([
+    ...skills.map((s) => s.id),
+    ...projects.map((p) => p.id),
+    ...experiences.map((e) => e.id),
+    ...educations.map((e) => e.id),
+    ...certs.map((c) => c.id),
+  ]);
+
+  for (const ev of existingEvidence) {
+    if (ev.reference_id && !validReferenceIds.has(ev.reference_id)) {
+      await db
+        .update(schema.resumeBullets)
+        .set({
+          provenance_state: 'UNLINKED',
+          evidence_id: null,
+        })
+        .where(eq(schema.resumeBullets.evidence_id, ev.id));
+
+      await db
+        .delete(schema.candidateEvidence)
+        .where(
+          and(
+            eq(schema.candidateEvidence.id, ev.id),
+            eq(schema.candidateEvidence.user_id, userId)
+          )
+        );
+    }
+  }
+
+  // Query updated active evidence list after sync & prune
+  const finalEvidence = await db
+    .select()
+    .from(schema.candidateEvidence)
+    .where(eq(schema.candidateEvidence.user_id, userId));
+
+  const totalActiveClaims = finalEvidence.length;
+  const alreadyUpToDateCount = Math.max(0, totalActiveClaims - addedCount);
+
+  return {
+    syncedCount: addedCount,
+    updatedCount: 0,
+    alreadyUpToDateCount,
+    totalActiveClaims,
+  };
 }
 
 // ─── Direct Candidate Data Controls (Addressing User Editing Request) ─────────
@@ -433,6 +484,18 @@ export async function removeCandidateSkill(userId: string, skillId: string): Pro
     .returning();
 
   if (deleted.length > 0) {
+    const evRows = await db
+      .select()
+      .from(schema.candidateEvidence)
+      .where(and(eq(schema.candidateEvidence.user_id, userId), eq(schema.candidateEvidence.reference_id, skillId)));
+
+    for (const ev of evRows) {
+      await db
+        .update(schema.resumeBullets)
+        .set({ provenance_state: 'UNLINKED', evidence_id: null })
+        .where(eq(schema.resumeBullets.evidence_id, ev.id));
+    }
+
     await db
       .delete(schema.candidateEvidence)
       .where(and(eq(schema.candidateEvidence.user_id, userId), eq(schema.candidateEvidence.reference_id, skillId)));
@@ -481,6 +544,18 @@ export async function deleteCandidateProject(userId: string, projectId: string):
     .returning();
 
   if (deleted.length > 0) {
+    const evRows = await db
+      .select()
+      .from(schema.candidateEvidence)
+      .where(and(eq(schema.candidateEvidence.user_id, userId), eq(schema.candidateEvidence.reference_id, projectId)));
+
+    for (const ev of evRows) {
+      await db
+        .update(schema.resumeBullets)
+        .set({ provenance_state: 'UNLINKED', evidence_id: null })
+        .where(eq(schema.resumeBullets.evidence_id, ev.id));
+    }
+
     await db
       .delete(schema.candidateEvidence)
       .where(and(eq(schema.candidateEvidence.user_id, userId), eq(schema.candidateEvidence.reference_id, projectId)));
@@ -530,10 +605,116 @@ export async function deleteCandidateExperience(userId: string, expId: string): 
     .returning();
 
   if (deleted.length > 0) {
+    const evRows = await db
+      .select()
+      .from(schema.candidateEvidence)
+      .where(and(eq(schema.candidateEvidence.user_id, userId), eq(schema.candidateEvidence.reference_id, expId)));
+
+    for (const ev of evRows) {
+      await db
+        .update(schema.resumeBullets)
+        .set({ provenance_state: 'UNLINKED', evidence_id: null })
+        .where(eq(schema.resumeBullets.evidence_id, ev.id));
+    }
+
     await db
       .delete(schema.candidateEvidence)
       .where(and(eq(schema.candidateEvidence.user_id, userId), eq(schema.candidateEvidence.reference_id, expId)));
     return true;
   }
   return false;
+}
+
+export async function addCandidateEducation(
+  userId: string,
+  edu: {
+    institution: string;
+    degree: string;
+    fieldOfStudy?: string | null;
+    startYear?: number | null;
+    endYear?: number | null;
+  }
+) {
+  const db = getDb();
+  const [newEdu] = await db
+    .insert(schema.candidateEducations)
+    .values({
+      user_id: userId,
+      institution: edu.institution.trim(),
+      degree: edu.degree.trim(),
+      field_of_study: edu.fieldOfStudy ? edu.fieldOfStudy.trim() : null,
+      start_year: edu.startYear || null,
+      end_year: edu.endYear || null,
+    })
+    .returning();
+
+  if (newEdu) {
+    const claim = `${newEdu.degree} in ${newEdu.field_of_study || 'General Studies'} from ${newEdu.institution}${
+      newEdu.end_year ? ` (Graduated ${newEdu.end_year})` : ''
+    }`;
+
+    await createCandidateEvidence(userId, {
+      evidenceType: 'EDUCATION',
+      referenceId: newEdu.id,
+      claimText: claim,
+      verifiedStatus: 'SELF_REPORTED',
+    });
+  }
+  return newEdu;
+}
+
+export async function deleteCandidateEducation(userId: string, educationId: string): Promise<boolean> {
+  const db = getDb();
+
+  // 1. User-isolated deletion from candidateEducations
+  const deleted = await db
+    .delete(schema.candidateEducations)
+    .where(
+      and(
+        eq(schema.candidateEducations.id, educationId),
+        eq(schema.candidateEducations.user_id, userId)
+      )
+    )
+    .returning();
+
+  if (deleted.length === 0) {
+    return false;
+  }
+
+  // 2. Find any candidate_evidence referencing this education
+  const evRows = await db
+    .select()
+    .from(schema.candidateEvidence)
+    .where(
+      and(
+        eq(schema.candidateEvidence.user_id, userId),
+        eq(schema.candidateEvidence.reference_id, educationId)
+      )
+    );
+
+  // 3. For any resume bullets linked to this evidence, update provenance to UNLINKED
+  for (const ev of evRows) {
+    await db
+      .update(schema.resumeBullets)
+      .set({
+        provenance_state: 'UNLINKED',
+        evidence_id: null,
+      })
+      .where(eq(schema.resumeBullets.evidence_id, ev.id));
+  }
+
+  // 4. Delete the evidence records so they are not falsely marked as supported
+  if (evRows.length > 0) {
+    await db
+      .delete(schema.candidateEvidence)
+      .where(
+        and(
+          eq(schema.candidateEvidence.user_id, userId),
+          eq(schema.candidateEvidence.reference_id, educationId)
+        )
+      );
+  }
+
+  log.info({ userId, educationId }, 'CANDIDATE_EDUCATION_DELETED');
+  return true;
 }

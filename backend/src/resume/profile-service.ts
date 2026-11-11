@@ -17,6 +17,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import { getDb } from '../database/connection.js';
 import { schema } from '../database/index.js';
 import { parseResumeText } from './resume-parser.js';
+import { syncProfileToEvidence } from '../resumes/career-evidence-service.js';
 import { createLogger } from '../utils/logger.js';
 import type {
   CandidateProfileDto,
@@ -103,6 +104,146 @@ export function calculateProfileCompleteness(params: {
     hasPreferredRoles: params.hasPreferredRoles,
     actionableTips,
   };
+}
+
+/**
+ * Normalizes institution name for deterministic duplicate comparison.
+ * Collapses whitespace, removes punctuation, ignores case, strips common prefixes ("at ", "from ").
+ */
+export function normalizeInstitution(name: string): string {
+  if (!name) return '';
+  return name
+    .toLowerCase()
+    .replace(/^(?:at|from)\s+/i, '')
+    .replace(/[^\w\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Normalizes degree titles to detect identical qualifications.
+ * Handles common abbreviations: b.tech/btech/b.e./bachelor of technology -> "b.tech / b.e."
+ */
+export function normalizeDegree(deg: string): string {
+  if (!deg) return '';
+  const d = deg.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+  if (/\b(btech|b\s*tech|be|b\s*e|bachelor\s+of\s+technology|bachelor\s+of\s+engineering)\b/i.test(d)) {
+    return 'b.tech / b.e.';
+  }
+  if (/\b(mtech|m\s*tech|me|m\s*e|master\s+of\s+technology|master\s+of\s+engineering)\b/i.test(d)) {
+    return 'm.tech / m.e.';
+  }
+  if (/\b(bca|bachelor\s+of\s+computer\s+applications)\b/i.test(d)) {
+    return 'bca';
+  }
+  if (/\b(mca|master\s+of\s+computer\s+applications)\b/i.test(d)) {
+    return 'mca';
+  }
+  if (/\b(bsc|b\s*sc|bachelor\s+of\s+science)\b/i.test(d)) {
+    return 'b.sc';
+  }
+  if (/\b(msc|m\s*sc|master\s+of\s+science)\b/i.test(d)) {
+    return 'm.sc';
+  }
+  return d;
+}
+
+/**
+ * Normalizes field of study for comparison.
+ */
+export function normalizeFieldOfStudy(field?: string | null): string {
+  if (!field) return '';
+  const f = field.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+  if (/\b(cs|cse|computer\s+science|computer\s+science\s+and\s+engineering|computer\s+science\s*&\s*engineering)\b/i.test(f)) {
+    return 'computer science & engineering';
+  }
+  if (/\b(it|information\s+technology)\b/i.test(f)) {
+    return 'information technology';
+  }
+  if (/\b(ece|electronics\s+and\s+communication)\b/i.test(f)) {
+    return 'electronics & communication';
+  }
+  return f;
+}
+
+/**
+ * Deterministically checks whether two education records represent the same qualification.
+ * 
+ * Rules:
+ * 1. Normalized degree must match. (Ensures B.Tech and M.Tech from the same college remain distinct!)
+ * 2. Normalized institution must match (or one is the generic default "University / College").
+ * 3. If both have start/end years, years must not conflict.
+ * 4. If both have specific fields of study, fields must not conflict.
+ */
+export function isSameEducation(
+  existing: {
+    institution: string;
+    degree: string;
+    field_of_study?: string | null;
+    start_year?: number | null;
+    end_year?: number | null;
+  },
+  candidate: {
+    institution: string;
+    degree: string;
+    fieldOfStudy?: string | null;
+    startYear?: number | null;
+    endYear?: number | null;
+  }
+): boolean {
+  const normExistDeg = normalizeDegree(existing.degree);
+  const normCandDeg = normalizeDegree(candidate.degree);
+  if (normExistDeg !== normCandDeg) {
+    return false; // Different degree = distinct qualification
+  }
+
+  const normExistInst = normalizeInstitution(existing.institution);
+  const normCandInst = normalizeInstitution(candidate.institution);
+
+  // Institution matching:
+  // If either institution is generic "university / college", or both match
+  const isGenericExist = !normExistInst || normExistInst === 'university college';
+  const isGenericCand = !normCandInst || normCandInst === 'university college';
+
+  if (!isGenericExist && !isGenericCand && normExistInst !== normCandInst) {
+    // If institution names differ, check if one contains the other (e.g. "IIT Bombay" vs "Indian Institute of Technology Bombay")
+    const substringMatch = normExistInst.includes(normCandInst) || normCandInst.includes(normExistInst);
+    if (!substringMatch) {
+      // Check canonical institution acronym expansion (e.g. IIT <-> Indian Institute of Technology)
+      const expandAcronyms = (s: string) =>
+        s
+          .replace(/\biit\b/g, 'indian institute of technology')
+          .replace(/\bnit\b/g, 'national institute of technology')
+          .replace(/\biiit\b/g, 'indian institute of information technology')
+          .replace(/\bbits\b/g, 'birla institute of technology and science')
+          .replace(/\s+/g, ' ')
+          .trim();
+      const expExist = expandAcronyms(normExistInst);
+      const expCand = expandAcronyms(normCandInst);
+      if (expExist !== expCand && !expExist.includes(expCand) && !expCand.includes(expExist)) {
+        return false;
+      }
+    }
+  }
+
+  // Field of study check: if both non-empty, must match
+  const normExistField = normalizeFieldOfStudy(existing.field_of_study);
+  const normCandField = normalizeFieldOfStudy(candidate.fieldOfStudy);
+  if (normExistField && normCandField && normExistField !== normCandField) {
+    return false;
+  }
+
+  // Year check: if both have end_year, must match
+  if (existing.end_year && candidate.endYear && existing.end_year !== candidate.endYear) {
+    return false;
+  }
+
+  // If both have start_year, must match
+  if (existing.start_year && candidate.startYear && existing.start_year !== candidate.startYear) {
+    return false;
+  }
+
+  return true;
 }
 
 /**
@@ -565,16 +706,64 @@ export async function uploadAndParseResume(
       .onConflictDoNothing();
   }
 
-  // Populate educations
+  // Populate educations with deterministic duplicate detection & non-destructive enrichment
+  const existingEducations = await db
+    .select()
+    .from(schema.candidateEducations)
+    .where(eq(schema.candidateEducations.user_id, userId));
+
   for (const e of parsedData.educations) {
-    await db.insert(schema.candidateEducations).values({
-      user_id: userId,
-      institution: e.institution,
-      degree: e.degree,
-      field_of_study: e.fieldOfStudy || null,
-      start_year: e.startYear || null,
-      end_year: e.endYear || null,
-    });
+    const matchedExisting = existingEducations.find((ex) => isSameEducation(ex, e));
+
+    if (matchedExisting) {
+      // Existing qualification found. If parsed data provides richer details (e.g. non-generic institution or missing field/year), update non-destructively
+      const updates: Partial<typeof schema.candidateEducations.$inferInsert> = {};
+      const normMatchedInst = normalizeInstitution(matchedExisting.institution);
+      const isGenericMatched = !normMatchedInst || normMatchedInst === 'university college';
+
+      if (isGenericMatched && e.institution && normalizeInstitution(e.institution) !== 'university college') {
+        updates.institution = e.institution;
+      }
+      if (!matchedExisting.field_of_study && e.fieldOfStudy) {
+        updates.field_of_study = e.fieldOfStudy;
+      }
+      if (!matchedExisting.start_year && e.startYear) {
+        updates.start_year = e.startYear;
+      }
+      if (!matchedExisting.end_year && e.endYear) {
+        updates.end_year = e.endYear;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await db
+          .update(schema.candidateEducations)
+          .set(updates)
+          .where(
+            and(
+              eq(schema.candidateEducations.id, matchedExisting.id),
+              eq(schema.candidateEducations.user_id, userId)
+            )
+          );
+      }
+      // Deduplicated: do NOT insert duplicate row
+    } else {
+      // New distinct qualification: insert row and record into local list for subsequent entries
+      const [inserted] = await db
+        .insert(schema.candidateEducations)
+        .values({
+          user_id: userId,
+          institution: e.institution,
+          degree: e.degree,
+          field_of_study: e.fieldOfStudy || null,
+          start_year: e.startYear || null,
+          end_year: e.endYear || null,
+        })
+        .returning();
+
+      if (inserted) {
+        existingEducations.push(inserted);
+      }
+    }
   }
 
   // Populate projects
@@ -607,6 +796,13 @@ export async function uploadAndParseResume(
       is_internship: exp.isInternship,
       description: exp.description || null,
     });
+  }
+
+  // Auto-sync extracted profile items into Master Evidence Vault (Engine 3)
+  try {
+    await syncProfileToEvidence(userId);
+  } catch (syncErr: any) {
+    log.error({ err: syncErr?.message, userId }, 'AUTO_SYNC_EVIDENCE_FAILED');
   }
 
   log.info({ userId, filename, skillsExtracted: parsedData.skills.length }, 'RESUME_UPLOADED_AND_PARSED');

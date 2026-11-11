@@ -9,6 +9,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import 'dotenv/config';
 import type { ICollector, JobCandidate, CollectorHealth } from '../collectors/types.js';
 import type { AtsType } from '../ats/types.js';
 
@@ -28,6 +29,14 @@ vi.mock('../database/connection.js', () => ({
 vi.mock('../database/index.js', () => ({
   schema: {
     scanRuns: {},
+  },
+}));
+
+vi.mock('../config/env.js', () => ({
+  config: {
+    recentJobWindowDays: 10,
+    jobScanIntervalMinutes: 30,
+    nodeEnv: 'test',
   },
 }));
 

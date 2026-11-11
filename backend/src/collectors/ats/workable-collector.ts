@@ -19,6 +19,7 @@ import { BaseCollector } from '../base-collector.js';
 import type { JobCandidate, CollectorHealth } from '../types.js';
 import { validateJobUrl } from '../url-validator.js';
 import { createLogger } from '../../utils/logger.js';
+import { tracedFetch } from '../../utils/http-telemetry.js';
 
 const log = createLogger('collector:workable');
 

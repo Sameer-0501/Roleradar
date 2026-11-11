@@ -77,6 +77,15 @@ export interface PipelineStats {
   closed: number;
 }
 
+/**
+ * Freshness TTL in hours for unchanged active jobs.
+ * If an existing active job was verified within this window and its content
+ * has not changed, the scan pipeline reuses the verified state and refreshes last_seen_at,
+ * eliminating redundant live HTTP verification calls.
+ * Periodic re-verification is still performed once the TTL expires or via ReverificationWorker.
+ */
+export const VERIFICATION_FRESHNESS_TTL_HOURS = 24;
+
 export interface PipelineOptions {
   /**
    * Which discovery path triggered this pipeline run.
@@ -84,6 +93,14 @@ export interface PipelineOptions {
    * Defaults to 'NEW_JOB' when not provided.
    */
   discoveryReason?: 'NEW_JOB' | 'RECENT_JOB';
+  /**
+   * Explicitly force live verification even if the job is active, verified, and fresh.
+   */
+  forceVerification?: boolean;
+  /**
+   * Custom freshness TTL in hours (defaults to VERIFICATION_FRESHNESS_TTL_HOURS = 24).
+   */
+  freshnessTtlHours?: number;
 }
 
 /**
@@ -138,10 +155,16 @@ export async function runPipeline(
     }
 
     // Step 2: Upsert into the database
-    let jobId: string;
+    let upsertResult: {
+      jobId: string;
+      isNew: boolean;
+      contentChanged: boolean;
+      status?: string;
+      verificationStatus?: string;
+      lastVerifiedAt?: Date | null;
+    };
     try {
-      const result = await upsertDiscoveredJob(candidate, companyId);
-      jobId = result.jobId;
+      upsertResult = await upsertDiscoveredJob(candidate, companyId);
     } catch (err) {
       log.error(
         {
@@ -154,7 +177,43 @@ export async function runPipeline(
       continue;
     }
 
-    // Step 3: Mark as VERIFYING
+    const jobId = upsertResult.jobId;
+
+    // Step 3: Safe Unchanged-Job Verification Policy (Master Plan OPT-1)
+    // If an existing job is ACTIVE, VERIFIED, unchanged, and was verified within the freshness TTL,
+    // skip live HTTP verification. Its existence is already re-confirmed by discovery (last_seen_at refreshed).
+    // Mandatory verification MUST still run if:
+    //  - Job is newly discovered (isNew === true)
+    //  - Job content changed (contentChanged === true)
+    //  - Job is not in ACTIVE status (e.g. DISCOVERED, UPDATED, CLOSED, VERIFICATION_FAILED)
+    //  - Verification status is not VERIFIED (e.g. PENDING, FAILED)
+    //  - lastVerifiedAt is null or older than the freshness TTL (periodic safety check)
+    //  - forceVerification is explicitly requested
+    const ttlHours = options.freshnessTtlHours ?? VERIFICATION_FRESHNESS_TTL_HOURS;
+    const ttlMs = ttlHours * 60 * 60 * 1000;
+    const isWithinTtl =
+      upsertResult.lastVerifiedAt !== null &&
+      upsertResult.lastVerifiedAt !== undefined &&
+      (Date.now() - new Date(upsertResult.lastVerifiedAt).getTime()) < ttlMs;
+
+    const isVerifiedAndFresh =
+      !options.forceVerification &&
+      !upsertResult.isNew &&
+      !upsertResult.contentChanged &&
+      upsertResult.status === 'ACTIVE' &&
+      upsertResult.verificationStatus === 'VERIFIED' &&
+      isWithinTtl;
+
+    if (isVerifiedAndFresh) {
+      log.debug(
+        { jobId, externalJobId: candidate.externalJobId, lastVerifiedAt: upsertResult.lastVerifiedAt },
+        'PIPELINE_VERIFY_REUSED existing job is ACTIVE, VERIFIED, and fresh — skipping redundant HTTP verification'
+      );
+      stats.verified++;
+      continue;
+    }
+
+    // Step 4: Mark as VERIFYING
     try {
       await markJobVerifying(jobId);
     } catch (err) {
@@ -166,7 +225,7 @@ export async function runPipeline(
       continue;
     }
 
-    // Step 4: Verify
+    // Step 5: Verify
     let verificationResult;
     try {
       verificationResult = await verifyJob({

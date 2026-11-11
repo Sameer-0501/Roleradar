@@ -126,12 +126,25 @@ export function mountCandidateProfileView(options: CandidateProfileViewOptions):
         reader.onload = async () => {
           if (isDestroyed) return;
           try {
-            const dataUrl = typeof reader.result === 'string' ? reader.result : '';
-            const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : '';
+            const rawResult = typeof reader.result === 'string' ? reader.result : '';
+            let base64 = '';
+            let content: string | undefined;
+
+            if (rawResult.startsWith('data:')) {
+              base64 = rawResult.includes(',') ? rawResult.split(',')[1] : '';
+            } else {
+              content = rawResult;
+              try {
+                base64 = typeof btoa === 'function' ? btoa(rawResult) : Buffer.from(rawResult).toString('base64');
+              } catch {
+                base64 = '';
+              }
+            }
 
             await profileService.uploadResume({
               filename: file.name,
               base64,
+              content,
               mimeType: file.type || 'application/octet-stream',
             });
             if (isDestroyed) return;
@@ -150,7 +163,11 @@ export function mountCandidateProfileView(options: CandidateProfileViewOptions):
           }
         };
 
-        reader.readAsDataURL(file);
+        if (typeof reader.readAsDataURL === 'function') {
+          reader.readAsDataURL(file);
+        } else {
+          reader.readAsText(file);
+        }
       });
     }
 
@@ -356,6 +373,76 @@ export function mountCandidateProfileView(options: CandidateProfileViewOptions):
         }
       });
     });
+
+    // ── Direct Candidate Controls: Education ──
+    const toggleEduBtn = scopeContainer.querySelector<HTMLButtonElement>('#btn-toggle-add-edu');
+    const eduFormBox = scopeContainer.querySelector<HTMLElement>('#form-add-edu-box');
+    const cancelEduBtn = scopeContainer.querySelector<HTMLButtonElement>('#btn-cancel-edu');
+    const submitEduBtn = scopeContainer.querySelector<HTMLButtonElement>('#btn-submit-edu');
+
+    if (toggleEduBtn && eduFormBox) {
+      addTrackedListener(toggleEduBtn, 'click', () => {
+        eduFormBox.style.display = eduFormBox.style.display === 'none' ? 'block' : 'none';
+      });
+    }
+    if (cancelEduBtn && eduFormBox) {
+      addTrackedListener(cancelEduBtn, 'click', () => {
+        eduFormBox.style.display = 'none';
+      });
+    }
+    if (submitEduBtn && eduFormBox) {
+      addTrackedListener(submitEduBtn, 'click', async () => {
+        const degreeEl = scopeContainer.querySelector<HTMLInputElement>('#input-edu-degree');
+        const instEl = scopeContainer.querySelector<HTMLInputElement>('#input-edu-inst');
+        const fieldEl = scopeContainer.querySelector<HTMLInputElement>('#input-edu-field');
+        const startEl = scopeContainer.querySelector<HTMLInputElement>('#input-edu-start');
+        const endEl = scopeContainer.querySelector<HTMLInputElement>('#input-edu-end');
+
+        const degree = degreeEl?.value.trim();
+        const institution = instEl?.value.trim();
+        if (!degree || !institution) {
+          showToast('Degree and Institution are required', 'error');
+          return;
+        }
+
+        submitEduBtn.disabled = true;
+        try {
+          await resumesService.addEducation({
+            degree,
+            institution,
+            fieldOfStudy: fieldEl?.value.trim() || undefined,
+            startYear: startEl?.value ? parseInt(startEl.value, 10) : undefined,
+            endYear: endEl?.value ? parseInt(endEl.value, 10) : undefined,
+          });
+          showToast('Education added to profile!', 'success');
+          void loadProfileData();
+        } catch (err: any) {
+          showToast(err?.message || 'Failed to add education', 'error');
+          submitEduBtn.disabled = false;
+        }
+      });
+    }
+
+    scopeContainer.querySelectorAll<HTMLButtonElement>('.btn-delete-profile-edu').forEach((btn) => {
+      addTrackedListener(btn, 'click', async () => {
+        const eduId = btn.getAttribute('data-edu-id');
+        if (!eduId || isDestroyed) return;
+        if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+          if (!window.confirm('Delete this education record from your profile?')) return;
+        }
+        btn.disabled = true;
+        btn.textContent = '...';
+        try {
+          await resumesService.deleteEducation(eduId);
+          showToast('Education record removed', 'success');
+          void loadProfileData();
+        } catch (err: any) {
+          showToast(err?.message || 'Failed to delete education', 'error');
+          btn.disabled = false;
+          btn.textContent = 'Delete';
+        }
+      });
+    });
   };
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -425,9 +512,12 @@ export function mountCandidateProfileView(options: CandidateProfileViewOptions):
         ? profile.educations.map((e) => {
             const years = e.startYear && e.endYear ? e.startYear + ' - ' + e.endYear : (e.endYear || '');
             return (
-              '<div class="profile-history-item">' +
-                '<strong>' + escapeHtml(e.degree) + (e.fieldOfStudy ? ' in ' + escapeHtml(e.fieldOfStudy) : '') + '</strong>' +
-                '<div>' + escapeHtml(e.institution) + (years ? ' · ' + years : '') + '</div>' +
+              '<div class="profile-history-item" style="display:flex; justify-content:space-between; align-items:flex-start;">' +
+                '<div>' +
+                  '<strong>' + escapeHtml(e.degree) + (e.fieldOfStudy ? ' in ' + escapeHtml(e.fieldOfStudy) : '') + '</strong>' +
+                  '<div>' + escapeHtml(e.institution) + (years ? ' · ' + years : '') + '</div>' +
+                '</div>' +
+                '<button type="button" class="btn-delete-profile-edu" data-edu-id="' + escapeHtml(e.id) + '" style="border:none; background:none; color:#ef4444; font-size:0.75rem; cursor:pointer; padding:2px 6px;" title="Remove education">Delete</button>' +
               '</div>'
             );
           }).join('')
@@ -524,7 +614,23 @@ export function mountCandidateProfileView(options: CandidateProfileViewOptions):
             '</div>' +
 
             '<div class="kn-card profile-card">' +
-              '<h3 style="font-size:1.1rem; font-weight:600; margin-bottom:12px;">🎓 Education</h3>' +
+              '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">' +
+                '<h3 style="font-size:1.1rem; font-weight:600; margin:0;">🎓 Education</h3>' +
+                '<button type="button" id="btn-toggle-add-edu" class="kn-btn kn-btn--secondary" style="font-size:0.8rem; padding:2px 8px;">+ Add Education</button>' +
+              '</div>' +
+              '<div id="form-add-edu-box" style="display:none; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:12px; margin-bottom:12px;">' +
+                '<input type="text" id="input-edu-degree" class="kn-input" placeholder="Degree (e.g. B.Tech / B.E., BCA, Master of Science)" style="width:100%; margin-bottom:6px; font-size:0.85rem;" />' +
+                '<input type="text" id="input-edu-inst" class="kn-input" placeholder="Institution / College / University" style="width:100%; margin-bottom:6px; font-size:0.85rem;" />' +
+                '<input type="text" id="input-edu-field" class="kn-input" placeholder="Field of Study (e.g. Computer Science & Engineering)" style="width:100%; margin-bottom:6px; font-size:0.85rem;" />' +
+                '<div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:6px;">' +
+                  '<input type="number" id="input-edu-start" class="kn-input" placeholder="Start Year (e.g. 2020)" style="font-size:0.85rem;" />' +
+                  '<input type="number" id="input-edu-end" class="kn-input" placeholder="Graduation Year (e.g. 2024)" style="font-size:0.85rem;" />' +
+                '</div>' +
+                '<div style="display:flex; justify-content:flex-end; gap:6px;">' +
+                  '<button type="button" id="btn-cancel-edu" class="kn-btn kn-btn--secondary" style="font-size:0.8rem; padding:2px 8px;">Cancel</button>' +
+                  '<button type="button" id="btn-submit-edu" class="kn-btn kn-btn--primary" style="font-size:0.8rem; padding:2px 8px;">Save Education</button>' +
+                '</div>' +
+              '</div>' +
               '<div class="profile-section-content">' +
                 eduHtml +
               '</div>' +

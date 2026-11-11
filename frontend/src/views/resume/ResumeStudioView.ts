@@ -116,7 +116,11 @@ export function mountResumeStudioView(options: ResumeStudioViewOptions): ResumeS
       syncBtn.textContent = '⏳ Syncing...';
       try {
         const res = await resumesService.syncEvidence();
-        showToast(`Vault synced: ${res.syncedCount} atomic claims up to date!`, 'success');
+        if (res.syncedCount > 0) {
+          showToast(`Vault synced: ${res.syncedCount} new claim(s) added (${res.totalActiveClaims} total claims in vault).`, 'success');
+        } else {
+          showToast(`Vault up to date: all ${res.totalActiveClaims || evidenceList.length} claims are synchronized.`, 'info');
+        }
         await loadInitialData();
       } catch (err: any) {
         showToast(err?.message || 'Failed to sync evidence', 'error');
@@ -153,11 +157,11 @@ export function mountResumeStudioView(options: ResumeStudioViewOptions): ResumeS
   // 2. Fetch Initial Studio Data
   async function loadInitialData(): Promise<void> {
     try {
-      const [profile, evList, varList, jobsRes] = await Promise.all([
+      // 1. Fetch essential profile, evidence, and variants in parallel
+      const [profile, evList, varList] = await Promise.all([
         resumesService.getCareerProfile(),
         resumesService.listEvidence(),
         resumesService.listResumeVariants(),
-        jobsService.listVerifiedJobs().catch(() => ({ jobs: [] })),
       ]);
 
       if (isDestroyed) return;
@@ -168,28 +172,62 @@ export function mountResumeStudioView(options: ResumeStudioViewOptions): ResumeS
       const vCountEl = container.querySelector<HTMLElement>('#variant-tab-count');
       if (vCountEl) vCountEl.textContent = String(variants.length);
 
-      verifiedJobs = (jobsRes.jobs || []).map((j: any) => ({
-        id: j.id,
-        title: j.title,
-        companyName: j.company?.name || 'Verified Employer',
-      }));
+      // 2. Fetch verified jobs independently so jobs issues do not crash the studio
+      try {
+        const jobsRes = await jobsService.getVerifiedJobs(1, 50);
+        if (jobsRes && Array.isArray(jobsRes.jobs)) {
+          verifiedJobs = jobsRes.jobs
+            .map((j: any) => ({
+              id: String(j.id || ''),
+              title: String(j.title || 'Untitled Role'),
+              companyName: String(j.company?.name || j.company_name || 'Verified Employer'),
+            }))
+            .filter((j: any) => Boolean(j.id));
+        } else {
+          verifiedJobs = [];
+        }
+      } catch (jobErr) {
+        console.warn('Verified jobs could not be loaded for Resume Studio:', jobErr);
+        verifiedJobs = [];
+      }
 
       if (verifiedJobs.length > 0 && !selectedJobId) {
         selectedJobId = verifiedJobs[0].id;
       }
 
       if (variants.length > 0 && !selectedVariant) {
-        const fullVariant = await resumesService.getResumeVariant(variants[0].id);
-        selectedVariant = fullVariant;
-        if (fullVariant.bullets && fullVariant.bullets.length > 0) {
-          selectedBullet = fullVariant.bullets[0];
+        try {
+          const fullVariant = await resumesService.getResumeVariant(variants[0].id);
+          selectedVariant = fullVariant;
+          if (fullVariant.bullets && fullVariant.bullets.length > 0) {
+            selectedBullet = fullVariant.bullets[0];
+          }
+        } catch {
+          selectedVariant = variants[0];
         }
       }
 
       renderActiveTab();
     } catch (err: any) {
       if (isDestroyed) return;
-      slotEl.innerHTML = `<div class="kn-card" style="padding:2rem; text-align:center;"><p style="color:var(--color-danger,#ef4444);">Failed to load Resume Studio: ${escapeHtml(err.message)}</p></div>`;
+      slotEl.innerHTML = `
+        <div class="kn-card" style="padding:2.5rem; text-align:center;">
+          <p style="color:var(--color-danger,#ef4444); font-weight:600; font-size:1.05rem; margin-bottom:1rem;">
+            Failed to load Resume Studio: ${escapeHtml(err.message)}
+          </p>
+          <p class="kn-text-muted" style="margin-bottom:1.5rem; font-size:0.9rem;">
+            Unable to connect to Master Evidence services. Please verify your connection or click retry below.
+          </p>
+          <button type="button" id="btn-retry-studio-load" class="kn-btn kn-btn--primary">🔄 Retry Loading</button>
+        </div>
+      `;
+      const retryBtn = slotEl.querySelector<HTMLButtonElement>('#btn-retry-studio-load');
+      if (retryBtn) {
+        addTrackedListener(retryBtn, 'click', () => {
+          slotEl.innerHTML = `<div class="kn-card" style="padding:2.5rem; text-align:center;"><p class="kn-text-muted">Reloading Resume Studio...</p></div>`;
+          void loadInitialData();
+        });
+      }
     }
   }
 
@@ -211,13 +249,18 @@ export function mountResumeStudioView(options: ResumeStudioViewOptions): ResumeS
   // TAB 1: Master Evidence Vault
   // ───────────────────────────────────────────────────────────────────────────
   function renderVaultTab(): void {
-    const stats = careerProfile?.evidenceStats || {
-      totalClaims: evidenceList.length,
-      skillsCount: 0,
-      projectsCount: 0,
-      experiencesCount: 0,
-      educationsCount: 0,
-      certificationsCount: 0,
+    const skillsCount = evidenceList.filter((e) => e.evidenceType === 'PROFILE_SKILL').length;
+    const projectsCount = evidenceList.filter((e) => e.evidenceType === 'PROJECT').length;
+    const experiencesCount = evidenceList.filter((e) => e.evidenceType === 'EXPERIENCE').length;
+    const educationsCount = evidenceList.filter((e) => e.evidenceType === 'EDUCATION').length;
+    const totalClaims = evidenceList.length;
+
+    const stats = {
+      totalClaims,
+      skillsCount,
+      projectsCount,
+      experiencesCount,
+      educationsCount,
     };
 
     const filteredClaims = evidenceFilter === 'ALL'
@@ -225,11 +268,11 @@ export function mountResumeStudioView(options: ResumeStudioViewOptions): ResumeS
       : evidenceList.filter((e) => e.evidenceType === evidenceFilter);
 
     const filterPills = [
-      { key: 'ALL', label: `All Claims (${evidenceList.length})` },
-      { key: 'PROJECT', label: `Projects (${stats.projectsCount})` },
-      { key: 'EXPERIENCE', label: `Work History (${stats.experiencesCount})` },
-      { key: 'PROFILE_SKILL', label: `Skills (${stats.skillsCount})` },
-      { key: 'EDUCATION', label: `Education (${stats.educationsCount})` },
+      { key: 'ALL', label: `All Claims (${totalClaims})` },
+      { key: 'PROJECT', label: `Projects (${projectsCount})` },
+      { key: 'EXPERIENCE', label: `Work History (${experiencesCount})` },
+      { key: 'PROFILE_SKILL', label: `Skills (${skillsCount})` },
+      { key: 'EDUCATION', label: `Education (${educationsCount})` },
     ];
 
     const pillsHtml = filterPills.map((p) => {
@@ -405,7 +448,11 @@ export function mountResumeStudioView(options: ResumeStudioViewOptions): ResumeS
   function renderStudioTab(): void {
     const jobOptionsHtml = verifiedJobs.length > 0
       ? verifiedJobs.map((j) => `<option value="${escapeHtml(j.id)}" ${j.id === selectedJobId ? 'selected' : ''}>${escapeHtml(j.title)} · ${escapeHtml(j.companyName)}</option>`).join('')
-      : '<option value="">No verified jobs found</option>';
+      : '<option value="">No verified jobs currently loaded</option>';
+
+    const jobHelperHtml = verifiedJobs.length === 0
+      ? `<div style="font-size:0.8rem; color:#b45309; margin-top:4px;">Verified jobs not loaded. <button type="button" id="btn-retry-studio-jobs" style="background:none; border:none; color:var(--color-primary,#2563eb); cursor:pointer; text-decoration:underline; font-size:0.8rem;">Retry loading jobs</button></div>`
+      : '';
 
     const activeBullets = selectedVariant?.bullets || [];
     const truthfulnessScore = selectedVariant?.truthfulnessScore ?? 100;
@@ -525,6 +572,7 @@ export function mountResumeStudioView(options: ResumeStudioViewOptions): ResumeS
               <select id="select-target-job" class="kn-input" style="width:100%;">
                 ${jobOptionsHtml}
               </select>
+              ${jobHelperHtml}
             </div>
             <div style="flex:1; min-width:220px;">
               <label style="font-size:0.85rem; font-weight:600; display:block; margin-bottom:4px;">Role Variant Name</label>
@@ -643,6 +691,34 @@ export function mountResumeStudioView(options: ResumeStudioViewOptions): ResumeS
         }
       });
     });
+
+    // Retry loading verified jobs if empty
+    const retryJobsBtn = slotEl.querySelector<HTMLButtonElement>('#btn-retry-studio-jobs');
+    if (retryJobsBtn) {
+      addTrackedListener(retryJobsBtn, 'click', async () => {
+        retryJobsBtn.disabled = true;
+        retryJobsBtn.textContent = '⏳ Loading...';
+        try {
+          const jobsRes = await jobsService.getVerifiedJobs(1, 50);
+          if (jobsRes && Array.isArray(jobsRes.jobs)) {
+            verifiedJobs = jobsRes.jobs.map((j: any) => ({
+              id: String(j.id || ''),
+              title: String(j.title || 'Untitled Role'),
+              companyName: String(j.company?.name || j.company_name || 'Verified Employer'),
+            })).filter((j: any) => Boolean(j.id));
+            if (verifiedJobs.length > 0 && !selectedJobId) {
+              selectedJobId = verifiedJobs[0].id;
+            }
+            showToast(`Loaded ${verifiedJobs.length} verified jobs`, 'success');
+            renderStudioTab();
+          }
+        } catch (err: any) {
+          showToast(err?.message || 'Failed to load verified jobs', 'error');
+          retryJobsBtn.disabled = false;
+          retryJobsBtn.textContent = 'Retry loading jobs';
+        }
+      });
+    }
 
     // Delete Bullet
     slotEl.querySelectorAll<HTMLButtonElement>('.btn-delete-bullet').forEach((btn) => {
@@ -809,3 +885,4 @@ export function mountResumeStudioView(options: ResumeStudioViewOptions): ResumeS
     },
   };
 }
+

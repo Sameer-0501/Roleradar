@@ -20,6 +20,7 @@
 
 import { BaseCollector } from '../base-collector.js';
 import { validateJobUrl } from '../url-validator.js';
+import { tracedFetch } from '../../utils/http-telemetry.js';
 import type { JobCandidate, CollectorHealth } from '../types.js';
 import type { AtsType } from '../../ats/types.js';
 
@@ -95,7 +96,7 @@ async function fetchWithRetry(
       const timer = setTimeout(() => controller.abort(), timeoutMs);
 
       try {
-        const response = await fetch(url, {
+        const response = await tracedFetch(url, {
           ...options,
           signal: controller.signal,
           headers: {
@@ -104,7 +105,7 @@ async function fetchWithRetry(
             'User-Agent': 'KCarrier-JobEngine/2.0 (job-verification-system)',
             ...options.headers,
           },
-        });
+        }, 'ATS_DISCOVERY');
         clearTimeout(timer);
 
         // Do not retry on 404 or 4xx client errors (except 429)

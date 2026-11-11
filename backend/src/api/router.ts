@@ -101,6 +101,8 @@ import {
   deleteCandidateProjectHandler,
   addCandidateExperienceHandler,
   deleteCandidateExperienceHandler,
+  addCandidateEducationHandler,
+  deleteCandidateEducationHandler,
   tailorResumeHandler,
   listResumeVariantsHandler,
   getResumeVariantHandler,
@@ -284,6 +286,18 @@ export function createRouter(): Router {
 
   router.delete('/candidate/experiences/:id', requireAuth, (req, res) => {
     void deleteCandidateExperienceHandler(req, res);
+  });
+
+  router.post('/candidate/educations', requireAuth, (req, res) => {
+    void addCandidateEducationHandler(req, res);
+  });
+
+  router.delete('/candidate/educations/:id', requireAuth, (req, res) => {
+    void deleteCandidateEducationHandler(req, res);
+  });
+
+  router.delete('/profile/educations/:id', requireAuth, (req, res) => {
+    void deleteCandidateEducationHandler(req, res);
   });
 
   // Resume Studio & Tailoring

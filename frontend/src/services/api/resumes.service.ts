@@ -96,6 +96,15 @@ export interface TailoredResumeResult {
   updatedAt: string;
 }
 
+export interface SyncEvidenceResponse {
+  message: string;
+  syncedCount: number;
+  updatedCount: number;
+  alreadyUpToDateCount: number;
+  totalActiveClaims: number;
+  profile: CareerProfile;
+}
+
 export interface ATSInspectionReport {
   overallScore: number;
   parsingQuality: {
@@ -167,17 +176,31 @@ export const resumesService = {
     await httpClient.delete(`/candidate/evidence/${encodeURIComponent(id)}`);
   },
 
-  async syncEvidence(): Promise<{ syncedCount: number; profile: CareerProfile }> {
-    return httpClient.post<{ syncedCount: number; profile: CareerProfile }>('/candidate/evidence/sync');
+  async syncEvidence(): Promise<SyncEvidenceResponse> {
+    return httpClient.post<SyncEvidenceResponse>('/candidate/evidence/sync');
   },
 
-  // Direct Candidate Controls (Skills, Projects, Experience)
+  // Direct Candidate Controls (Skills, Projects, Experience, Education)
   async addSkill(skillName: string, category: string = 'Technical'): Promise<any> {
     return httpClient.post('/candidate/skills', { skillName, category });
   },
 
   async deleteSkill(skillId: string): Promise<void> {
     await httpClient.delete(`/candidate/skills/${encodeURIComponent(skillId)}`);
+  },
+
+  async addEducation(payload: {
+    institution: string;
+    degree: string;
+    fieldOfStudy?: string;
+    startYear?: number;
+    endYear?: number;
+  }): Promise<any> {
+    return httpClient.post('/candidate/educations', payload);
+  },
+
+  async deleteEducation(educationId: string): Promise<void> {
+    await httpClient.delete(`/candidate/educations/${encodeURIComponent(educationId)}`);
   },
 
   async addProject(payload: {
@@ -246,3 +269,4 @@ export const resumesService = {
     return data.inspection;
   },
 };
+

@@ -132,17 +132,19 @@ export function filterCandidatesByRecentWindow(
  * activeScans lock, ensuring this sweep and the normal scan for the same
  * source never execute concurrently.
  *
- * @param collector    - The collector to use for source discovery
- * @param companyId    - UUID of the company in the database
- * @param sourceConfig - Pipeline source configuration
- * @param options      - Sweep options (window size)
+ * @param collector              - The collector to use for source discovery
+ * @param companyId              - UUID of the company in the database
+ * @param sourceConfig           - Pipeline source configuration
+ * @param options                - Sweep options (window size)
+ * @param preDiscoveredCandidates - Optional pre-fetched candidates from the main scan cycle to eliminate redundant HTTP transfers
  * @returns Sweep statistics
  */
 export async function runRecentSourceSweep(
   collector: ICollector,
   companyId: string,
   sourceConfig: PipelineSourceConfig,
-  options: RecentSourceSweepOptions
+  options: RecentSourceSweepOptions,
+  preDiscoveredCandidates?: JobCandidate[]
 ): Promise<RecentSourceSweepStats> {
   const sourceName = collector.getSourceName();
   const now = options.now ?? new Date();
@@ -172,18 +174,24 @@ export async function runRecentSourceSweep(
     'RECENT_SWEEP_STARTED'
   );
 
-  // 1. Fetch full listing from the ATS source (reuses existing collector, same API call)
+  // 1. Fetch full listing from the ATS source (or reuse pre-discovered candidates from scan)
   let allCandidates: JobCandidate[];
-  try {
-    allCandidates = await collector.discoverJobs();
+  if (preDiscoveredCandidates) {
+    allCandidates = preDiscoveredCandidates;
     stats.jobsFetched = allCandidates.length;
-    log.info({ source: sourceName, fetched: allCandidates.length }, 'RECENT_SWEEP_FETCHED');
-  } catch (err) {
-    log.error(
-      { source: sourceName, err: err instanceof Error ? err.message : String(err) },
-      'RECENT_SWEEP_FETCH_ERROR collector threw during discoverJobs'
-    );
-    return stats;
+    log.info({ source: sourceName, fetched: allCandidates.length, reused: true }, 'RECENT_SWEEP_REUSED_DISCOVERY');
+  } else {
+    try {
+      allCandidates = await collector.discoverJobs();
+      stats.jobsFetched = allCandidates.length;
+      log.info({ source: sourceName, fetched: allCandidates.length }, 'RECENT_SWEEP_FETCHED');
+    } catch (err) {
+      log.error(
+        { source: sourceName, err: err instanceof Error ? err.message : String(err) },
+        'RECENT_SWEEP_FETCH_ERROR collector threw during discoverJobs'
+      );
+      return stats;
+    }
   }
 
   // 2. Apply posting-date window filter (CONFIRMED and INFERRED dates only)

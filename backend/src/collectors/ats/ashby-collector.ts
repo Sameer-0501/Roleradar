@@ -15,6 +15,8 @@ import { BaseCollector } from '../base-collector.js';
 import type { JobCandidate, CollectorHealth } from '../types.js';
 import { validateJobUrl } from '../url-validator.js';
 import { createLogger } from '../../utils/logger.js';
+import { ashbyBoardCache } from './ashby-board-cache.js';
+import { tracedFetch } from '../../utils/http-telemetry.js';
 
 const log = createLogger('collector:ashby');
 
@@ -76,13 +78,13 @@ export class AshbyCollector extends BaseCollector {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
-      const response = await fetch(url, {
+      const response = await tracedFetch(url, {
         signal: controller.signal,
         headers: {
           'User-Agent': 'KCarrier-JobEngine/2.0 (healthcheck)',
           Accept: 'application/json',
         },
-      });
+      }, 'HEALTH_CHECK');
       clearTimeout(timeout);
 
       if (response.ok) {
@@ -111,13 +113,13 @@ export class AshbyCollector extends BaseCollector {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
-      const response = await fetch(url, {
+      const response = await tracedFetch(url, {
         signal: controller.signal,
         headers: {
           'User-Agent': 'KCarrier-JobEngine/2.0 (collector)',
           Accept: 'application/json',
         },
-      });
+      }, 'ATS_DISCOVERY');
       clearTimeout(timeout);
 
       if (!response.ok) {
@@ -136,6 +138,9 @@ export class AshbyCollector extends BaseCollector {
       log.warn({ url }, 'ASHBY_FETCH response missing jobs array');
       return [];
     }
+
+    // Populate board-scoped scan-cycle cache to eliminate O(N^2) verification re-downloads
+    ashbyBoardCache.setBoardJobs(this.jobBoardName, rawJobs);
 
     const candidates: JobCandidate[] = [];
     let rejectedCount = 0;

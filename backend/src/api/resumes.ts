@@ -25,6 +25,8 @@ import {
   deleteCandidateProject,
   addCandidateExperience,
   deleteCandidateExperience,
+  addCandidateEducation,
+  deleteCandidateEducation,
   type EvidenceType,
 } from '../resumes/career-evidence-service.js';
 import {
@@ -133,9 +135,16 @@ export async function syncEvidenceHandler(req: Request, res: Response): Promise<
   const userId = authReq.user.id;
 
   try {
-    const syncedCount = await syncProfileToEvidence(userId);
+    const syncResult = await syncProfileToEvidence(userId);
     const profile = await getOrCreateCareerProfile(userId);
-    res.json({ message: 'Evidence synced successfully', syncedCount, profile });
+    res.json({
+      message: 'Evidence synced successfully',
+      syncedCount: syncResult.syncedCount,
+      updatedCount: syncResult.updatedCount,
+      alreadyUpToDateCount: syncResult.alreadyUpToDateCount,
+      totalActiveClaims: syncResult.totalActiveClaims,
+      profile,
+    });
   } catch (err: any) {
     log.error({ err: err.message, userId }, 'Failed to sync evidence');
     res.status(500).json({ error: 'Failed to sync evidence', details: err.message });
@@ -268,6 +277,49 @@ export async function deleteCandidateExperienceHandler(req: Request, res: Respon
   } catch (err: any) {
     log.error({ err: err.message, id, userId }, 'Failed to delete candidate experience');
     res.status(500).json({ error: 'Failed to delete experience', details: err.message });
+  }
+}
+
+export async function addCandidateEducationHandler(req: Request, res: Response): Promise<void> {
+  const authReq = req as StrictlyAuthenticatedRequest;
+  const userId = authReq.user.id;
+  const { institution, degree, fieldOfStudy, startYear, endYear } = req.body;
+
+  if (!institution || !degree) {
+    res.status(400).json({ error: 'institution and degree are required' });
+    return;
+  }
+
+  try {
+    const education = await addCandidateEducation(userId, {
+      institution: String(institution).trim(),
+      degree: String(degree).trim(),
+      fieldOfStudy: fieldOfStudy ? String(fieldOfStudy).trim() : null,
+      startYear: startYear ? parseInt(String(startYear), 10) : null,
+      endYear: endYear ? parseInt(String(endYear), 10) : null,
+    });
+    res.status(201).json({ education });
+  } catch (err: any) {
+    log.error({ err: err.message, userId }, 'Failed to add candidate education');
+    res.status(500).json({ error: 'Failed to add education', details: err.message });
+  }
+}
+
+export async function deleteCandidateEducationHandler(req: Request, res: Response): Promise<void> {
+  const authReq = req as StrictlyAuthenticatedRequest;
+  const userId = authReq.user.id;
+  const id = String(req.params.id);
+
+  try {
+    const deleted = await deleteCandidateEducation(userId, id);
+    if (!deleted) {
+      res.status(404).json({ error: 'Education record not found or access denied' });
+      return;
+    }
+    res.json({ message: 'Education record deleted successfully' });
+  } catch (err: any) {
+    log.error({ err: err.message, id, userId }, 'Failed to delete candidate education');
+    res.status(500).json({ error: 'Failed to delete education', details: err.message });
   }
 }
 

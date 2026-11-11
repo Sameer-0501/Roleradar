@@ -44,6 +44,15 @@ export type JobStatus =
 
 export type VerificationStatus = 'PENDING' | 'VERIFIED' | 'FAILED';
 
+export interface UpsertDiscoveredJobResult {
+  jobId: string;
+  isNew: boolean;
+  contentChanged: boolean;
+  status: JobStatus;
+  verificationStatus: VerificationStatus;
+  lastVerifiedAt: Date | null;
+}
+
 /**
  * Process a discovered job candidate:
  * 1. Check if the job already exists (by logical identity).
@@ -56,7 +65,7 @@ export type VerificationStatus = 'PENDING' | 'VERIFIED' | 'FAILED';
 export async function upsertDiscoveredJob(
   candidate: JobCandidate,
   companyId: string
-): Promise<{ jobId: string; isNew: boolean; contentChanged: boolean }> {
+): Promise<UpsertDiscoveredJobResult> {
   const db = getDb();
   const contentHash = computeContentHash({
     title: candidate.title,
@@ -64,6 +73,7 @@ export async function upsertDiscoveredJob(
     description: candidate.description,
     requirements: candidate.requirements,
     officialUrl: candidate.officialUrl,
+    applyUrl: candidate.applyUrl,
   });
 
   // Look up existing job by logical identity
@@ -112,7 +122,14 @@ export async function upsertDiscoveredJob(
       'JOBS_DISCOVERED new job inserted'
     );
 
-    return { jobId: inserted!.id, isNew: true, contentChanged: false };
+    return {
+      jobId: inserted!.id,
+      isNew: true,
+      contentChanged: false,
+      status: 'DISCOVERED',
+      verificationStatus: 'PENDING',
+      lastVerifiedAt: null,
+    };
   }
 
   const existingJob = existing[0]!;
@@ -147,15 +164,31 @@ export async function upsertDiscoveredJob(
       { jobId: existingJob.id, title: candidate.title },
       'JOBS_DISCOVERED content changed, marked UPDATED'
     );
+
+    return {
+      jobId: existingJob.id,
+      isNew: false,
+      contentChanged: true,
+      status: 'UPDATED',
+      verificationStatus: 'PENDING',
+      lastVerifiedAt: existingJob.last_verified_at,
+    };
   } else {
     // No change — just refresh last_seen_at
     await db
       .update(schema.jobs)
       .set({ last_seen_at: now, updated_at: now })
       .where(eq(schema.jobs.id, existingJob.id));
-  }
 
-  return { jobId: existingJob.id, isNew: false, contentChanged };
+    return {
+      jobId: existingJob.id,
+      isNew: false,
+      contentChanged: false,
+      status: existingJob.status as JobStatus,
+      verificationStatus: existingJob.verification_status as VerificationStatus,
+      lastVerifiedAt: existingJob.last_verified_at,
+    };
+  }
 }
 
 /**

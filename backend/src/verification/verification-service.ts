@@ -37,6 +37,8 @@ import { eq, desc } from 'drizzle-orm';
 import { getDb } from '../database/connection.js';
 import { schema } from '../database/index.js';
 import { createLogger } from '../utils/logger.js';
+import { ashbyBoardCache } from '../collectors/ats/ashby-board-cache.js';
+import { tracedFetch } from '../utils/http-telemetry.js';
 import type { VerificationInput, VerificationResult, VerificationStatus } from './types.js';
 
 const log = createLogger('verification-service');
@@ -59,6 +61,7 @@ export function computeContentHash(fields: {
   description?: string;
   requirements?: string;
   officialUrl?: string;
+  applyUrl?: string;
 }): string {
   const normalised = [
     (fields.title ?? '').toLowerCase().trim(),
@@ -66,6 +69,7 @@ export function computeContentHash(fields: {
     (fields.description ?? '').toLowerCase().trim(),
     (fields.requirements ?? '').toLowerCase().trim(),
     (fields.officialUrl ?? '').toLowerCase().trim(),
+    (fields.applyUrl ?? '').toLowerCase().trim(),
   ].join('|');
   return createHash('sha256').update(normalised).digest('hex');
 }
@@ -167,13 +171,13 @@ async function fetchGreenhouseJob(
 
     let response: Response;
     try {
-      response = await fetch(url, {
+      response = await tracedFetch(url, {
         signal: controller.signal,
         headers: {
           Accept: 'application/json',
           'User-Agent': 'RoleRadar-JobEngine/2.0 (job-verification-system)',
         },
-      });
+      }, 'ATS_VERIFICATION');
     } finally {
       clearTimeout(timer);
     }
@@ -233,13 +237,13 @@ async function fetchLeverJob(
 
     let response: Response;
     try {
-      response = await fetch(url, {
+      response = await tracedFetch(url, {
         signal: controller.signal,
         headers: {
           Accept: 'application/json',
           'User-Agent': 'RoleRadar-JobEngine/2.0 (job-verification-system)',
         },
-      });
+      }, 'ATS_VERIFICATION');
     } finally {
       clearTimeout(timer);
     }
@@ -328,13 +332,13 @@ async function fetchWorkdayJob(
 
     let response: Response;
     try {
-      response = await fetch(url, {
+      response = await tracedFetch(url, {
         signal: controller.signal,
         headers: {
           Accept: 'application/json',
           'User-Agent': 'RoleRadar-JobEngine/2.0 (job-verification-system)',
         },
-      });
+      }, 'ATS_VERIFICATION');
     } finally {
       clearTimeout(timer);
     }
@@ -411,13 +415,13 @@ async function fetchCustomJob(
 
     let response: Response;
     try {
-      response = await fetch(url, {
+      response = await tracedFetch(url, {
         signal: controller.signal,
         headers: {
           Accept: 'application/json',
           'User-Agent': 'RoleRadar-JobEngine/2.0 (job-verification-system)',
         },
-      });
+      }, 'ATS_VERIFICATION');
     } finally {
       clearTimeout(timer);
     }
@@ -543,13 +547,13 @@ async function fetchWorkableJob(
 
     let response: Response;
     try {
-      response = await fetch(url, {
+      response = await tracedFetch(url, {
         signal: controller.signal,
         headers: {
           Accept: 'application/json',
           'User-Agent': 'RoleRadar-JobEngine/2.0 (job-verification-system)',
         },
-      });
+      }, 'ATS_VERIFICATION');
     } finally {
       clearTimeout(timer);
     }
@@ -607,13 +611,13 @@ async function fetchAshbyJob(
 
     let response: Response;
     try {
-      response = await fetch(url, {
+      response = await tracedFetch(url, {
         signal: controller.signal,
         headers: {
           Accept: 'application/json',
           'User-Agent': 'RoleRadar-JobEngine/2.0 (job-verification-system)',
         },
-      });
+      }, 'ATS_VERIFICATION');
     } finally {
       clearTimeout(timer);
     }
@@ -694,13 +698,13 @@ async function fetchSmartrecruitersJob(
 
     let response: Response;
     try {
-      response = await fetch(url, {
+      response = await tracedFetch(url, {
         signal: controller.signal,
         headers: {
           Accept: 'application/json',
           'User-Agent': 'RoleRadar-JobEngine/2.0 (job-verification-system)',
         },
-      });
+      }, 'ATS_VERIFICATION');
     } finally {
       clearTimeout(timer);
     }
@@ -771,7 +775,7 @@ async function fetchSapJob(
 
     let response: Response;
     try {
-      response = await fetch(url, {
+      response = await tracedFetch(url, {
         method: 'POST',
         signal: controller.signal,
         headers: {
@@ -780,7 +784,7 @@ async function fetchSapJob(
           'User-Agent': 'RoleRadar-JobEngine/2.0 (job-verification-system)',
         },
         body: JSON.stringify(payload)
-      });
+      }, 'ATS_VERIFICATION');
     } finally {
       clearTimeout(timer);
     }
@@ -1209,7 +1213,38 @@ export async function verifyJob(input: VerificationInput): Promise<VerificationR
       }
     }
   } else if (input.ashbyConfig) {
-    const fetchResult = await fetchAshbyJob(input.ashbyConfig.jobBoardName, input.externalJobId);
+    let fetchResult:
+      | { found: true; job: AshbyJobDetail }
+      | { found: false }
+      | { found: null; reason: string };
+
+    // Check board-scoped, scan-cycle-scoped discovery cache first (eliminates O(N^2) full-board re-fetches)
+    const cached = ashbyBoardCache.getCachedJob(
+      input.ashbyConfig.jobBoardName,
+      input.externalJobId
+    );
+
+    if (cached.cacheHit) {
+      if (cached.found && cached.job) {
+        log.debug(
+          { jobId: input.jobId, externalJobId: input.externalJobId, board: input.ashbyConfig.jobBoardName },
+          'ASHBY_VERIFY cache hit — verified from scan-cycle discovery board context'
+        );
+        fetchResult = { found: true, job: cached.job };
+      } else {
+        log.warn(
+          { jobId: input.jobId, externalJobId: input.externalJobId, board: input.ashbyConfig.jobBoardName },
+          'ASHBY_VERIFY cache hit — job not found in authoritative discovery board (confirmed closed)'
+        );
+        fetchResult = { found: false };
+      }
+    } else {
+      log.info(
+        { jobId: input.jobId, externalJobId: input.externalJobId, board: input.ashbyConfig.jobBoardName },
+        'ASHBY_VERIFY cache miss or expired — falling back to live HTTP fetch'
+      );
+      fetchResult = await fetchAshbyJob(input.ashbyConfig.jobBoardName, input.externalJobId);
+    }
 
     if (fetchResult.found === false) {
       // HTTP 404 or job removed from active job board = authoritative "job does not exist"
