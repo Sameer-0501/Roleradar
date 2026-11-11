@@ -86,13 +86,13 @@ export class WorkableCollector extends BaseCollector {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
-      const response = await fetch(url, {
+      const response = await tracedFetch(url, {
         signal: controller.signal,
         headers: {
           'User-Agent': 'KCarrier-JobEngine/2.0 (healthcheck)',
           Accept: 'application/json',
         },
-      });
+      }, 'HEALTH_CHECK');
       clearTimeout(timeout);
 
       if (response.ok) {
@@ -121,7 +121,7 @@ export class WorkableCollector extends BaseCollector {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
-      const response = await fetch(url, {
+      const response = await tracedFetch(url, {
         method: 'POST',
         signal: controller.signal,
         headers: {

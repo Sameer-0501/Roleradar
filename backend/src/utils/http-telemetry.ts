@@ -236,18 +236,24 @@ export async function tracedFetch(
 
   const durationMs = Date.now() - startMs;
 
-  // Inspect headers
-  const clHeader = response.headers.get('content-length');
+  // Inspect headers safely (supports both WHATWG Response and unit test mocks)
+  const headers = response.headers;
+  const clHeader = headers && typeof headers.get === 'function' ? headers.get('content-length') : null;
   const contentLengthBytes = clHeader !== null && !isNaN(Number(clHeader)) ? parseInt(clHeader, 10) : null;
 
-  // Accurately capture decompressed body size using clone()
+  // Accurately capture decompressed body size using clone() if available
   let decompressedPayloadBytes = 0;
-  try {
-    const clone = response.clone();
-    const buffer = await clone.arrayBuffer();
-    decompressedPayloadBytes = buffer.byteLength;
-  } catch {
-    // If clone() or arrayBuffer() fails (e.g. closed stream), fall back to contentLengthBytes or 0
+  if (typeof response.clone === 'function') {
+    try {
+      const clone = response.clone();
+      if (typeof clone.arrayBuffer === 'function') {
+        const buffer = await clone.arrayBuffer();
+        decompressedPayloadBytes = buffer.byteLength;
+      }
+    } catch {
+      decompressedPayloadBytes = contentLengthBytes ?? 0;
+    }
+  } else {
     decompressedPayloadBytes = contentLengthBytes ?? 0;
   }
 

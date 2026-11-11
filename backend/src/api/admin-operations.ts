@@ -7,6 +7,7 @@ import { scheduler } from '../scheduler/scheduler.js';
 import { reverificationWorker } from '../jobs/reverification-worker.js';
 import { windowedDigestWorker } from '../notifications/digest-worker.js';
 import { auditService, AuditActions, AuditOutcomes, AuditAction, AuditOutcome } from '../audit/audit-service.js';
+import { httpTelemetry } from '../utils/http-telemetry.js';
 import type { AuthenticatedRequest } from '../auth/middleware.js';
 
 const log = createLogger('api:admin-operations');
@@ -319,5 +320,22 @@ export async function adminGetAuditLogsHandler(req: AuthenticatedRequest, res: R
     console.error('API ERROR (adminGetAuditLogsHandler):', err);
     log.error({ err: err instanceof Error ? err.message : String(err) }, 'Failed to get audit logs');
     res.status(500).json({ error: 'Failed to retrieve audit logs' });
+  }
+}
+
+/**
+ * GET /api/admin/network-telemetry
+ * Returns aggregated outbound HTTP network metrics, payload byte counts,
+ * Content-Length totals, and estimated wire byte transfers.
+ */
+export async function adminGetNetworkTelemetryHandler(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const rawWindowMs = parseInt(String(req.query['windowMs'] || '3600000'), 10);
+    const windowMs = isNaN(rawWindowMs) ? 3600000 : rawWindowMs;
+    const summary = httpTelemetry.getSummary(windowMs);
+    res.json(summary);
+  } catch (err) {
+    log.error({ err: err instanceof Error ? err.message : String(err) }, 'Failed to retrieve network telemetry');
+    res.status(500).json({ error: 'Failed to retrieve network telemetry' });
   }
 }

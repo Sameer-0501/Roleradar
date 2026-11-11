@@ -17,6 +17,7 @@ import {
   adminReverifyJobHandler,
   adminRetryNotificationHandler,
   adminGetAuditLogsHandler,
+  adminGetNetworkTelemetryHandler,
 } from './admin-operations.js';
 import {
   perSourceScanTriggerLimiter,
@@ -60,6 +61,9 @@ export function createAdminRouter(): Router {
 
   // ─── Phase 16.5 Audit Logging ───────────────────────────────────────────
   router.get('/audit-logs', adminGetAuditLogsHandler as any);
+
+  // ─── Network Consumption Optimization (Step 4 Telemetry) ─────────────────
+  router.get('/network-telemetry', adminGetNetworkTelemetryHandler as any);
 
   return router;
 }

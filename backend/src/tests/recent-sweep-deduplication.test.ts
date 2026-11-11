@@ -214,6 +214,9 @@ describe('Step 3: Recent Source Sweep Discovery De-duplication', () => {
     scheduler.register(collector, 30 * 60_000, COMPANY_ID, SOURCE_CONFIG);
     scheduler.start();
 
+    // Advance fake timer to fire the startup trigger for slot 0
+    vi.advanceTimersByTime(1);
+
     // Verify scheduled collectors
     expect(scheduler.jobs.size).toBe(1);
     const scheduled = scheduler.jobs.get(collector.getSourceName());

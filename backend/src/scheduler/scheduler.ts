@@ -23,6 +23,7 @@ import { runPipeline } from '../pipeline/pipeline.js';
 import { runRecentSourceSweep } from '../pipeline/recent-source-sweep.js';
 import { evaluateAndCreateRecentJobAlerts } from '../notifications/alert-service.js';
 import { sourceHealthTracker } from '../health/source-health.js';
+import { AsyncSemaphore } from '../utils/semaphore.js';
 import { config } from '../config/env.js';
 import type { ScheduledJob, SchedulerState, SchedulerStatus } from './types.js';
 import type { ICollector } from '../collectors/types.js';
@@ -36,6 +37,10 @@ class JobScheduler {
   private jobs: Map<string, ScheduledJob> = new Map();
   private activeScans: Set<string> = new Set();
   private _status: SchedulerStatus = 'stopped';
+  /** Global concurrency semaphore limiting simultaneously running collector scans */
+  private scanSemaphore: AsyncSemaphore = new AsyncSemaphore(5);
+  /** Pending startup timers keyed by collector name */
+  private _startupTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
   /**
    * Timer handles for Recent Source Sweep intervals, keyed by collector name.
    * Stored separately from ScheduledJob.handle so the ScheduledJob type stays
@@ -145,16 +150,19 @@ class JobScheduler {
     for (const [name, job] of this.jobs) {
       // 1. Queue a staggered startup scan so all collectors don't fire simultaneously.
       const startupDelay = startupIndex * STARTUP_STAGGER_MS;
-      setTimeout(() => {
+      const startupTimer = setTimeout(() => {
         void this.runScan(job);
+        // 2. Start recurring interval only after startup delay so recurring runs stay permanently staggered
+        const handle = setInterval(() => {
+          void this.runScan(job);
+        }, job.intervalMs);
+        const current = this.jobs.get(name);
+        if (current) {
+          this.jobs.set(name, { ...current, handle });
+        }
       }, startupDelay);
 
-      // 2. Register the recurring scan interval
-      const handle = setInterval(() => {
-        void this.runScan(job);
-      }, job.intervalMs);
-
-      this.jobs.set(name, { ...job, handle });
+      this._startupTimers.set(name, startupTimer);
 
       log.info(
         {
@@ -196,6 +204,11 @@ class JobScheduler {
       log.warn('Scheduler already stopped — ignoring stop()');
       return;
     }
+
+    for (const [name, timer] of this._startupTimers) {
+      clearTimeout(timer);
+    }
+    this._startupTimers.clear();
 
     for (const [name, job] of this.jobs) {
       if (job.handle) {
@@ -263,6 +276,8 @@ class JobScheduler {
     }
 
     this.activeScans.add(job.name);
+    // Step 5: Global concurrency semaphore limits concurrent collectors to prevent stampedes
+    await this.scanSemaphore.acquire();
     const startMs = Date.now();
     const startedAt = new Date();
 
@@ -306,21 +321,32 @@ class JobScheduler {
       let errorMessage: string | null = null;
 
       try {
-        log.info({ source: job.name }, 'SOURCE_CHECK running health check');
-        const health = await job.collector.healthCheck();
-        sourceHealthTracker.recordHealthCheck({
-          company: companyName,
-          source: sourceType,
-          healthy: health.healthy,
-          message: health.message,
-          checkedAt: health.checkedAt,
-        });
-
-        if (!health.healthy) {
-          log.warn(
-            { source: job.name, reason: health.message },
-            'SOURCE_CHECK health check failed — running discovery anyway'
-          );
+        // Step 6: Eliminate redundant pre-scan health check on routine automated scans.
+        // Standalone healthCheck() is reserved for manual admin requests and diagnostics.
+        // Routine operational health is tracked directly via discovery outcomes and recordScanSuccess/Failure.
+        if (isManual) {
+          log.info({ source: job.name }, 'SOURCE_CHECK running diagnostic health check (manual trigger)');
+          try {
+            const health = await job.collector.healthCheck();
+            sourceHealthTracker.recordHealthCheck({
+              company: companyName,
+              source: sourceType,
+              healthy: health.healthy,
+              message: health.message,
+              checkedAt: health.checkedAt,
+            });
+            if (!health.healthy) {
+              log.warn(
+                { source: job.name, reason: health.message },
+                'SOURCE_CHECK diagnostic health check reported unhealthy'
+              );
+            }
+          } catch (healthErr) {
+            log.warn(
+              { source: job.name, err: healthErr instanceof Error ? healthErr.message : String(healthErr) },
+              'SOURCE_CHECK diagnostic health check probe failed'
+            );
+          }
         }
 
         log.info({ source: job.name }, 'JOBS_DISCOVERED starting discovery');
@@ -424,6 +450,7 @@ class JobScheduler {
         'SCAN_COMPLETED'
       );
     } finally {
+      this.scanSemaphore.release();
       this.activeScans.delete(job.name);
     }
   }
@@ -502,6 +529,7 @@ class JobScheduler {
         'RECENT_SWEEP_ERROR'
       );
     } finally {
+      this.scanSemaphore.release();
       this.activeScans.delete(job.name);
     }
   }
@@ -559,6 +587,8 @@ class JobScheduler {
     this.stop();
     this.jobs.clear();
     this.activeScans.clear();
+    this._startupTimers.clear();
+    this.scanSemaphore.reset();
     this._recentSweepHandles.clear();
     this._dbReconciliationHandle = undefined;
   }

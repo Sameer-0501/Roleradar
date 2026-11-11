@@ -1,4 +1,5 @@
 import { BaseCollector } from '../base-collector.js';
+import { tracedFetch } from '../../utils/http-telemetry.js';
 import type { JobCandidate } from '../types.js';
 import type { AtsType } from '../../ats/types.js';
 
@@ -103,7 +104,7 @@ export class SapCollector extends BaseCollector {
           rcmCandidateId: ""
         };
 
-        const res = await fetch(apiUrl, {
+        const res = await tracedFetch(apiUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -111,7 +112,7 @@ export class SapCollector extends BaseCollector {
             'User-Agent': 'RoleRadar-JobEngine/2.0'
           },
           body: JSON.stringify(payload)
-        });
+        }, 'ATS_DISCOVERY');
 
         if (!res.ok) {
           this.log.error(
