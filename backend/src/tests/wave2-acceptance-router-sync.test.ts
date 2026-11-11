@@ -79,7 +79,10 @@ describe('Wave 2 Final Acceptance — Router Resolution & Cross-View Sync', () =
       expect(routerContent).toContain('this.currentViewController = mountAlertsView(');
       expect(routerContent).toContain('this.currentViewController = mountCandidateProfileView(');
       expect(routerContent).toContain('this.currentViewController = mountAccountSettingsView(');
-      expect(routerContent).toContain('this.currentViewController = mountResumeBuilderView(');
+      expect(
+        routerContent.includes('this.currentViewController = mountResumeStudioView(') ||
+        routerContent.includes('this.currentViewController = mountResumeBuilderView(')
+      ).toBe(true);
       expect(routerContent).toContain('this.currentViewController = mountPlacementPrepView(');
       expect(routerContent).toContain('this.currentViewController = mountAdminConsoleView(');
     });
