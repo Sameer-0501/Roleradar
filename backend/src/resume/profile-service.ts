@@ -13,17 +13,22 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { getDb } from '../database/connection.js';
 import { schema } from '../database/index.js';
 import { parseResumeText } from './resume-parser.js';
-import { syncProfileToEvidence } from '../resumes/career-evidence-service.js';
+import {
+  syncProfileToEvidence,
+  type SyncEvidenceResult,
+} from '../resumes/career-evidence-service.js';
 import { createLogger } from '../utils/logger.js';
+import { calculateProfileCompleteness } from './completeness-calculator.js';
 import type {
   CandidateProfileDto,
   ResumeMetadataDto,
-  ProfileCompletenessBreakdown,
 } from './resume-types.js';
+
+export { calculateProfileCompleteness };
 
 const log = createLogger('resume:profile-service');
 
@@ -32,78 +37,6 @@ const RESUME_STORAGE_DIR = path.resolve(process.cwd(), 'storage', 'resumes');
 // Ensure base private storage directory exists
 if (!fs.existsSync(RESUME_STORAGE_DIR)) {
   fs.mkdirSync(RESUME_STORAGE_DIR, { recursive: true });
-}
-
-/**
- * Calculate deterministic profile completeness score (0–100%).
- */
-export function calculateProfileCompleteness(params: {
-  hasResume: boolean;
-  skillsCount: number;
-  educationsCount: number;
-  projectsCount: number;
-  experiencesCount: number;
-  hasPreferredRoles: boolean;
-}): ProfileCompletenessBreakdown {
-  let score = 0;
-  const actionableTips: string[] = [];
-
-  // 1. Resume uploaded (+15 pts)
-  if (params.hasResume) {
-    score += 15;
-  } else {
-    actionableTips.push('Upload a PDF or DOCX resume for automated parsing (+15%)');
-  }
-
-  // 2. Verified Skills (+25 pts for >= 3 skills, +15 pts for 1-2 skills)
-  if (params.skillsCount >= 3) {
-    score += 25;
-  } else if (params.skillsCount >= 1) {
-    score += 15;
-    actionableTips.push('Add at least 3 core technical or domain skills (+10%)');
-  } else {
-    actionableTips.push('Add your key skills to boost matching accuracy (+25%)');
-  }
-
-  // 3. Education history (+20 pts)
-  if (params.educationsCount >= 1) {
-    score += 20;
-  } else {
-    actionableTips.push('Add your degree or highest education details (+20%)');
-  }
-
-  // 4. Projects (+15 pts)
-  if (params.projectsCount >= 1) {
-    score += 15;
-  } else {
-    actionableTips.push('Add at least 1 key academic or portfolio project (+15%)');
-  }
-
-  // 5. Experience or Internships (+15 pts)
-  if (params.experiencesCount >= 1) {
-    score += 15;
-  } else {
-    actionableTips.push('Add your work or internship experience (+15%)');
-  }
-
-  // 6. Preferred Roles & Headline (+10 pts)
-  if (params.hasPreferredRoles) {
-    score += 10;
-  } else {
-    actionableTips.push('Define your target role or professional headline (+10%)');
-  }
-
-  return {
-    score: Math.min(100, Math.max(0, score)),
-    hasResume: params.hasResume,
-    hasSkills: params.skillsCount > 0,
-    skillsCount: params.skillsCount,
-    hasEducation: params.educationsCount > 0,
-    hasProjects: params.projectsCount > 0,
-    hasExperienceOrInternship: params.experiencesCount > 0,
-    hasPreferredRoles: params.hasPreferredRoles,
-    actionableTips,
-  };
 }
 
 /**
@@ -118,6 +51,72 @@ export function normalizeInstitution(name: string): string {
     .replace(/[^\w\s]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/**
+ * Expands canonical institution acronyms commonly used in India and globally.
+ */
+export function expandInstitutionAcronyms(s: string): string {
+  return s
+    .replace(/\biit\b/g, 'indian institute of technology')
+    .replace(/\bnit\b/g, 'national institute of technology')
+    .replace(/\biiit\b/g, 'indian institute of information technology')
+    .replace(/\bbits\b/g, 'birla institute of technology and science')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Checks whether two institutions represent the exact same institution and campus.
+ * Preserves campus identity where distinguishable (e.g. BITS Pilani vs BITS Pilani, Goa Campus).
+ */
+export function areInstitutionsEquivalent(instA: string, instB: string): boolean {
+  const normA = normalizeInstitution(instA);
+  const normB = normalizeInstitution(instB);
+
+  if (!normA && !normB) return true;
+  if (!normA || !normB) return false;
+
+  const isGenA = normA === 'university college' || normA === 'university' || normA === 'college';
+  const isGenB = normB === 'university college' || normB === 'university' || normB === 'college';
+
+  // If one is generic placeholder, it matches only as a fallback
+  if (isGenA || isGenB) {
+    return true;
+  }
+
+  // Exact normalized match
+  if (normA === normB) return true;
+
+  // Acronym-expanded exact match (e.g. "IIT Bombay" === "Indian Institute of Technology, Bombay")
+  const expA = expandInstitutionAcronyms(normA);
+  const expB = expandInstitutionAcronyms(normB);
+  if (expA === expB) return true;
+
+  // Campus distinction check:
+  // If one institution has an explicit campus keyword (e.g. "goa campus") that the other lacks,
+  // or specifies a different campus, they represent distinct campus identities and MUST NOT be merged!
+  const campusWordA = /\bcampus\b/i.test(normA);
+  const campusWordB = /\bcampus\b/i.test(normB);
+  if (campusWordA !== campusWordB) {
+    // One specifies a sub-campus/branch, the other does not (e.g. "BITS Pilani" vs "BITS Pilani, Goa Campus")
+    return false;
+  }
+
+  // Token set equivalence for word reordering (e.g. "Delhi University" vs "University of Delhi")
+  const stopWords = new Set(['of', 'and', 'the', 'in', 'at', 'for']);
+  const getTokens = (s: string) =>
+    expandInstitutionAcronyms(s)
+      .split(/\s+/)
+      .filter((t) => t && !stopWords.has(t))
+      .sort()
+      .join(' ');
+
+  if (getTokens(normA) === getTokens(normB)) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -145,6 +144,18 @@ export function normalizeDegree(deg: string): string {
   if (/\b(msc|m\s*sc|master\s+of\s+science)\b/i.test(d)) {
     return 'm.sc';
   }
+  if (/\b(phd|ph\s*d|doctor\s+of\s+philosophy)\b/i.test(d)) {
+    return 'ph.d';
+  }
+  if (/\b(mba|master\s+of\s+business\s+administration)\b/i.test(d)) {
+    return 'mba';
+  }
+  if (/\b(bba|bachelor\s+of\s+business\s+administration)\b/i.test(d)) {
+    return 'bba';
+  }
+  if (/\b(diploma|polytechnic)\b/i.test(d)) {
+    return 'diploma';
+  }
   return d;
 }
 
@@ -160,8 +171,17 @@ export function normalizeFieldOfStudy(field?: string | null): string {
   if (/\b(it|information\s+technology)\b/i.test(f)) {
     return 'information technology';
   }
-  if (/\b(ece|electronics\s+and\s+communication)\b/i.test(f)) {
+  if (/\b(ece|electronics\s+and\s+communication|electronics\s*&\s*communication)\b/i.test(f)) {
     return 'electronics & communication';
+  }
+  if (/\b(me|mech|mechanical|mechanical\s+engineering)\b/i.test(f)) {
+    return 'mechanical engineering';
+  }
+  if (/\b(ee|electrical|electrical\s+engineering)\b/i.test(f)) {
+    return 'electrical engineering';
+  }
+  if (/\b(civil|civil\s+engineering)\b/i.test(f)) {
+    return 'civil engineering';
   }
   return f;
 }
@@ -171,9 +191,10 @@ export function normalizeFieldOfStudy(field?: string | null): string {
  * 
  * Rules:
  * 1. Normalized degree must match. (Ensures B.Tech and M.Tech from the same college remain distinct!)
- * 2. Normalized institution must match (or one is the generic default "University / College").
- * 3. If both have start/end years, years must not conflict.
- * 4. If both have specific fields of study, fields must not conflict.
+ * 2. Normalized institution and campus must match (acronym-expanded and campus-preserving).
+ * 3. Incomplete generic records (missing years + field) never match specific qualifications.
+ * 4. If both have start/end years, years must not conflict.
+ * 5. If both have specific fields of study, fields must not conflict.
  */
 export function isSameEducation(
   existing: {
@@ -191,54 +212,48 @@ export function isSameEducation(
     endYear?: number | null;
   }
 ): boolean {
+  // 1. Degree level verification (B.Tech and M.Tech must NEVER match)
   const normExistDeg = normalizeDegree(existing.degree);
   const normCandDeg = normalizeDegree(candidate.degree);
-  if (normExistDeg !== normCandDeg) {
+  if (!normExistDeg || !normCandDeg || normExistDeg !== normCandDeg) {
     return false; // Different degree = distinct qualification
   }
 
+  // 2. Institution & campus matching
   const normExistInst = normalizeInstitution(existing.institution);
   const normCandInst = normalizeInstitution(candidate.institution);
 
-  // Institution matching:
-  // If either institution is generic "university / college", or both match
-  const isGenericExist = !normExistInst || normExistInst === 'university college';
-  const isGenericCand = !normCandInst || normCandInst === 'university college';
+  const isGenericExist = !normExistInst || normExistInst === 'university college' || normExistInst === 'university' || normExistInst === 'college';
+  const isGenericCand = !normCandInst || normCandInst === 'university college' || normCandInst === 'university' || normCandInst === 'college';
 
-  if (!isGenericExist && !isGenericCand && normExistInst !== normCandInst) {
-    // If institution names differ, check if one contains the other (e.g. "IIT Bombay" vs "Indian Institute of Technology Bombay")
-    const substringMatch = normExistInst.includes(normCandInst) || normCandInst.includes(normExistInst);
-    if (!substringMatch) {
-      // Check canonical institution acronym expansion (e.g. IIT <-> Indian Institute of Technology)
-      const expandAcronyms = (s: string) =>
-        s
-          .replace(/\biit\b/g, 'indian institute of technology')
-          .replace(/\bnit\b/g, 'national institute of technology')
-          .replace(/\biiit\b/g, 'indian institute of information technology')
-          .replace(/\bbits\b/g, 'birla institute of technology and science')
-          .replace(/\s+/g, ' ')
-          .trim();
-      const expExist = expandAcronyms(normExistInst);
-      const expCand = expandAcronyms(normCandInst);
-      if (expExist !== expCand && !expExist.includes(expCand) && !expCand.includes(expExist)) {
-        return false;
-      }
+  // Incomplete record check:
+  // An incomplete record with generic institution AND missing years AND missing field of study
+  // lacks sufficient ground truth to be declared identical to a real qualification.
+  if (isGenericExist || isGenericCand) {
+    const hasYear = (existing.end_year && candidate.endYear) || (existing.start_year && candidate.startYear);
+    const hasField = existing.field_of_study && candidate.fieldOfStudy;
+    if (!hasYear && !hasField) {
+      return false;
     }
   }
 
-  // Field of study check: if both non-empty, must match
+  if (!areInstitutionsEquivalent(existing.institution, candidate.institution)) {
+    return false;
+  }
+
+  // 3. Field of study check: if both non-empty, must match
   const normExistField = normalizeFieldOfStudy(existing.field_of_study);
   const normCandField = normalizeFieldOfStudy(candidate.fieldOfStudy);
   if (normExistField && normCandField && normExistField !== normCandField) {
     return false;
   }
 
-  // Year check: if both have end_year, must match
+  // 4. Year check: if both have end_year, must match
   if (existing.end_year && candidate.endYear && existing.end_year !== candidate.endYear) {
     return false;
   }
 
-  // If both have start_year, must match
+  // 5. Start year check: if both have start_year, must match
   if (existing.start_year && candidate.startYear && existing.start_year !== candidate.startYear) {
     return false;
   }
@@ -611,7 +626,12 @@ export async function uploadAndParseResume(
   filename: string,
   fileBuffer: Buffer,
   mimeType: string
-): Promise<{ resume: ResumeMetadataDto; profile: CandidateProfileDto }> {
+): Promise<{
+  resume: ResumeMetadataDto;
+  profile: CandidateProfileDto;
+  syncResult?: SyncEvidenceResult;
+  syncError?: string;
+}> {
   const db = getDb();
 
   // Validate format, magic bytes, size, and MIME type
@@ -634,52 +654,47 @@ export async function uploadAndParseResume(
   const parsedData = parseResumeText(rawText);
 
   // Mark all previous resumes as inactive
-  await db
-    .update(schema.resumes)
-    .set({ is_active: false, updated_at: new Date() })
-    .where(eq(schema.resumes.user_id, userId));
+  let newResumeRecord: typeof schema.resumes.$inferSelect | null = null;
 
-  // Insert new active resume record (guaranteed 0 null bytes)
-  const [newResume] = await db
-    .insert(schema.resumes)
-    .values({
-      id: resumeId,
-      user_id: userId,
-      filename: validated.sanitizedFilename,
-      file_size: fileBuffer.length,
-      mime_type: validated.canonicalMime,
-      storage_path: storagePath,
-      parsed_text: rawText.slice(0, 10000), // bounded preview without null bytes
-      is_active: true,
-    })
-    .returning();
+  await db.transaction(async (tx) => {
+    // Acquire candidate-level advisory lock to serialize concurrent uploads for this user
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${'resume_upload:' + userId}))`);
 
-  // Upsert candidate profile
-  const completeness = calculateProfileCompleteness({
-    hasResume: true,
-    skillsCount: parsedData.skills.length,
-    educationsCount: parsedData.educations.length,
-    projectsCount: parsedData.projects.length,
-    experiencesCount: parsedData.experiences.length,
-    hasPreferredRoles: parsedData.targetRoles.length > 0,
-  });
+    await tx
+      .update(schema.resumes)
+      .set({ is_active: false, updated_at: new Date() })
+      .where(eq(schema.resumes.user_id, userId));
 
-  await db
-    .insert(schema.candidateProfiles)
-    .values({
-      user_id: userId,
-      full_name: parsedData.fullName || null,
-      headline: parsedData.headline || null,
-      summary: parsedData.summary || null,
-      primary_role: parsedData.primaryRole || null,
-      target_roles: parsedData.targetRoles,
-      experience_level: parsedData.experienceLevel,
-      total_experience_months: parsedData.totalExperienceMonths,
-      completeness_score: completeness.score,
-    })
-    .onConflictDoUpdate({
-      target: [schema.candidateProfiles.user_id],
-      set: {
+    // Insert new active resume record (guaranteed 0 null bytes)
+    const [insertedResume] = await tx
+      .insert(schema.resumes)
+      .values({
+        id: resumeId,
+        user_id: userId,
+        filename: validated.sanitizedFilename,
+        file_size: fileBuffer.length,
+        mime_type: validated.canonicalMime,
+        storage_path: storagePath,
+        parsed_text: rawText.slice(0, 10000), // bounded preview without null bytes
+        is_active: true,
+      })
+      .returning();
+    newResumeRecord = insertedResume;
+
+    // Upsert candidate profile
+    const completeness = calculateProfileCompleteness({
+      hasResume: true,
+      skillsCount: parsedData.skills.length,
+      educationsCount: parsedData.educations.length,
+      projectsCount: parsedData.projects.length,
+      experiencesCount: parsedData.experiences.length,
+      hasPreferredRoles: parsedData.targetRoles.length > 0,
+    });
+
+    await tx
+      .insert(schema.candidateProfiles)
+      .values({
+        user_id: userId,
         full_name: parsedData.fullName || null,
         headline: parsedData.headline || null,
         summary: parsedData.summary || null,
@@ -688,129 +703,174 @@ export async function uploadAndParseResume(
         experience_level: parsedData.experienceLevel,
         total_experience_months: parsedData.totalExperienceMonths,
         completeness_score: completeness.score,
-        updated_at: new Date(),
-      },
-    });
-
-  // Populate parsed skills (idempotent on canonical_name)
-  for (const s of parsedData.skills) {
-    await db
-      .insert(schema.candidateSkills)
-      .values({
-        user_id: userId,
-        skill_name: s.skillName,
-        canonical_name: s.canonicalName,
-        category: s.category,
-        source: 'PARSED',
       })
-      .onConflictDoNothing();
-  }
+      .onConflictDoUpdate({
+        target: [schema.candidateProfiles.user_id],
+        set: {
+          full_name: parsedData.fullName || null,
+          headline: parsedData.headline || null,
+          summary: parsedData.summary || null,
+          primary_role: parsedData.primaryRole || null,
+          target_roles: parsedData.targetRoles,
+          experience_level: parsedData.experienceLevel,
+          total_experience_months: parsedData.totalExperienceMonths,
+          completeness_score: completeness.score,
+          updated_at: new Date(),
+        },
+      });
 
-  // Populate educations with deterministic duplicate detection & non-destructive enrichment
-  const existingEducations = await db
-    .select()
-    .from(schema.candidateEducations)
-    .where(eq(schema.candidateEducations.user_id, userId));
-
-  for (const e of parsedData.educations) {
-    const matchedExisting = existingEducations.find((ex) => isSameEducation(ex, e));
-
-    if (matchedExisting) {
-      // Existing qualification found. If parsed data provides richer details (e.g. non-generic institution or missing field/year), update non-destructively
-      const updates: Partial<typeof schema.candidateEducations.$inferInsert> = {};
-      const normMatchedInst = normalizeInstitution(matchedExisting.institution);
-      const isGenericMatched = !normMatchedInst || normMatchedInst === 'university college';
-
-      if (isGenericMatched && e.institution && normalizeInstitution(e.institution) !== 'university college') {
-        updates.institution = e.institution;
-      }
-      if (!matchedExisting.field_of_study && e.fieldOfStudy) {
-        updates.field_of_study = e.fieldOfStudy;
-      }
-      if (!matchedExisting.start_year && e.startYear) {
-        updates.start_year = e.startYear;
-      }
-      if (!matchedExisting.end_year && e.endYear) {
-        updates.end_year = e.endYear;
-      }
-
-      if (Object.keys(updates).length > 0) {
-        await db
-          .update(schema.candidateEducations)
-          .set(updates)
-          .where(
-            and(
-              eq(schema.candidateEducations.id, matchedExisting.id),
-              eq(schema.candidateEducations.user_id, userId)
-            )
-          );
-      }
-      // Deduplicated: do NOT insert duplicate row
-    } else {
-      // New distinct qualification: insert row and record into local list for subsequent entries
-      const [inserted] = await db
-        .insert(schema.candidateEducations)
+    // Populate parsed skills (idempotent on canonical_name)
+    for (const s of parsedData.skills) {
+      await tx
+        .insert(schema.candidateSkills)
         .values({
           user_id: userId,
-          institution: e.institution,
-          degree: e.degree,
-          field_of_study: e.fieldOfStudy || null,
-          start_year: e.startYear || null,
-          end_year: e.endYear || null,
+          skill_name: s.skillName,
+          canonical_name: s.canonicalName,
+          category: s.category,
+          source: 'PARSED',
         })
-        .returning();
+        .onConflictDoNothing();
+    }
 
-      if (inserted) {
-        existingEducations.push(inserted);
+    // Populate educations with deterministic duplicate detection & non-destructive enrichment
+    const existingEducations = await tx
+      .select()
+      .from(schema.candidateEducations)
+      .where(eq(schema.candidateEducations.user_id, userId));
+
+    for (const e of parsedData.educations) {
+      const matchedExisting = existingEducations.find((ex) => isSameEducation(ex, e));
+
+      if (matchedExisting) {
+        // Existing qualification found. If parsed data provides richer details (e.g. non-generic institution or missing field/year), update non-destructively
+        const updates: Partial<typeof schema.candidateEducations.$inferInsert> = {};
+        const normMatchedInst = normalizeInstitution(matchedExisting.institution);
+        const isGenericMatched = !normMatchedInst || normMatchedInst === 'university college' || normMatchedInst === 'university' || normMatchedInst === 'college';
+
+        if (isGenericMatched && e.institution && normalizeInstitution(e.institution) !== 'university college') {
+          updates.institution = e.institution;
+        }
+        if (!matchedExisting.field_of_study && e.fieldOfStudy) {
+          updates.field_of_study = e.fieldOfStudy;
+        }
+        if (!matchedExisting.start_year && e.startYear) {
+          updates.start_year = e.startYear;
+        }
+        if (!matchedExisting.end_year && e.endYear) {
+          updates.end_year = e.endYear;
+        }
+
+        if (Object.keys(updates).length > 0) {
+          await tx
+            .update(schema.candidateEducations)
+            .set(updates)
+            .where(
+              and(
+                eq(schema.candidateEducations.id, matchedExisting.id),
+                eq(schema.candidateEducations.user_id, userId)
+              )
+            );
+        }
+        // Deduplicated: do NOT insert duplicate row
+      } else {
+        // New distinct qualification: insert row and record into local list for subsequent entries
+        const [inserted] = await tx
+          .insert(schema.candidateEducations)
+          .values({
+            user_id: userId,
+            institution: e.institution,
+            degree: e.degree,
+            field_of_study: e.fieldOfStudy || null,
+            start_year: e.startYear || null,
+            end_year: e.endYear || null,
+          })
+          .returning();
+
+        if (inserted) {
+          existingEducations.push(inserted);
+        }
       }
     }
-  }
 
-  // Populate projects
-  for (const p of parsedData.projects) {
-    await db.insert(schema.candidateProjects).values({
-      user_id: userId,
-      title: p.title,
-      description: p.description || null,
-      technologies: p.technologies || null,
-    });
-  }
+    // Populate projects
+    for (const p of parsedData.projects) {
+      await tx.insert(schema.candidateProjects).values({
+        user_id: userId,
+        title: p.title,
+        description: p.description || null,
+        technologies: p.technologies || null,
+      });
+    }
 
-  // Populate certifications
-  for (const c of parsedData.certifications) {
-    await db.insert(schema.candidateCertifications).values({
-      user_id: userId,
-      name: c.name,
-      issuer: c.issuer || null,
-      issue_year: c.issueYear || null,
-    });
-  }
+    // Populate certifications
+    for (const c of parsedData.certifications) {
+      await tx.insert(schema.candidateCertifications).values({
+        user_id: userId,
+        name: c.name,
+        issuer: c.issuer || null,
+        issue_year: c.issueYear || null,
+      });
+    }
 
-  // Populate experiences
-  for (const exp of parsedData.experiences) {
-    await db.insert(schema.candidateExperiences).values({
-      user_id: userId,
-      company_name: exp.companyName,
-      title: exp.title,
-      location: exp.location || null,
-      is_internship: exp.isInternship,
-      description: exp.description || null,
+    // Populate experiences
+    for (const exp of parsedData.experiences) {
+      await tx.insert(schema.candidateExperiences).values({
+        user_id: userId,
+        company_name: exp.companyName,
+        title: exp.title,
+        location: exp.location || null,
+        is_internship: exp.isInternship,
+        description: exp.description || null,
+      });
+    }
+
+    // Recalculate deterministic profile completeness from real aggregate data in database
+    const [finalSkills, finalEdus, finalProjs, finalExps] = await Promise.all([
+      tx.select().from(schema.candidateSkills).where(eq(schema.candidateSkills.user_id, userId)),
+      tx.select().from(schema.candidateEducations).where(eq(schema.candidateEducations.user_id, userId)),
+      tx.select().from(schema.candidateProjects).where(eq(schema.candidateProjects.user_id, userId)),
+      tx.select().from(schema.candidateExperiences).where(eq(schema.candidateExperiences.user_id, userId)),
+    ]);
+
+    const finalCompleteness = calculateProfileCompleteness({
+      hasResume: true,
+      skillsCount: finalSkills.length,
+      educationsCount: finalEdus.length,
+      projectsCount: finalProjs.length,
+      experiencesCount: finalExps.length,
+      hasPreferredRoles: parsedData.targetRoles.length > 0 || !!parsedData.headline,
     });
-  }
+
+    await tx
+      .update(schema.candidateProfiles)
+      .set({
+        completeness_score: finalCompleteness.score,
+        updated_at: new Date(),
+      })
+      .where(eq(schema.candidateProfiles.user_id, userId));
+  });
 
   // Auto-sync extracted profile items into Master Evidence Vault (Engine 3)
+  let syncResult: SyncEvidenceResult | null = null;
+  let syncError: string | null = null;
   try {
-    await syncProfileToEvidence(userId);
+    syncResult = await syncProfileToEvidence(userId);
   } catch (syncErr: any) {
-    log.error({ err: syncErr?.message, userId }, 'AUTO_SYNC_EVIDENCE_FAILED');
+    // Retain full diagnostic info in protected server logs
+    log.error({ err: syncErr?.message, stack: syncErr?.stack, userId }, 'AUTO_SYNC_EVIDENCE_FAILED');
+    // Return sanitized, candidate-safe message without exposing raw SQL or stack traces
+    syncError = 'Automatic evidence synchronization could not complete. You can safely retry syncing from your Evidence Vault without re-uploading.';
   }
 
   log.info({ userId, filename, skillsExtracted: parsedData.skills.length }, 'RESUME_UPLOADED_AND_PARSED');
 
   const updatedProfile = (await getCandidateProfile(userId))!;
   return {
-    resume: formatResumeDto(newResume!),
+    resume: formatResumeDto(newResumeRecord!),
     profile: updatedProfile,
+    syncResult: syncResult ?? undefined,
+    syncError: syncError ?? undefined,
   };
 }
 
@@ -870,6 +930,45 @@ export async function deleteResume(userId: string, resumeId: string): Promise<bo
   await db
     .delete(schema.resumes)
     .where(and(eq(schema.resumes.user_id, userId), eq(schema.resumes.id, resumeId)));
+
+  // Recalculate and update profile completeness score
+  const [profileRecord] = await db
+    .select()
+    .from(schema.candidateProfiles)
+    .where(eq(schema.candidateProfiles.user_id, userId))
+    .limit(1);
+
+  if (profileRecord) {
+    const [skillsRows, eduRows, projRows, expRows, activeResumes] = await Promise.all([
+      db.select().from(schema.candidateSkills).where(eq(schema.candidateSkills.user_id, userId)),
+      db.select().from(schema.candidateEducations).where(eq(schema.candidateEducations.user_id, userId)),
+      db.select().from(schema.candidateProjects).where(eq(schema.candidateProjects.user_id, userId)),
+      db.select().from(schema.candidateExperiences).where(eq(schema.candidateExperiences.user_id, userId)),
+      db
+        .select()
+        .from(schema.resumes)
+        .where(and(eq(schema.resumes.user_id, userId), eq(schema.resumes.is_active, true)))
+        .limit(1),
+    ]);
+
+    const targetRoles = (profileRecord?.target_roles as string[]) || [];
+    const completeness = calculateProfileCompleteness({
+      hasResume: activeResumes.length > 0,
+      skillsCount: skillsRows.length,
+      educationsCount: eduRows.length,
+      projectsCount: projRows.length,
+      experiencesCount: expRows.length,
+      hasPreferredRoles: targetRoles.length > 0 || !!profileRecord?.headline,
+    });
+
+    await db
+      .update(schema.candidateProfiles)
+      .set({
+        completeness_score: completeness.score,
+        updated_at: new Date(),
+      })
+      .where(eq(schema.candidateProfiles.user_id, userId));
+  }
 
   log.info({ userId, resumeId }, 'RESUME_DELETED');
   return true;

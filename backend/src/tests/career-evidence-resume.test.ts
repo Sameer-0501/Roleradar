@@ -86,11 +86,13 @@ describe('Engine 3: Career Evidence Profile & Resume Studio 2.0', () => {
   const userBetaId = '84444444-4444-4444-8444-444444444444';
 
   async function cleanupTestData() {
-    // Delete in reverse FK order
-    await db.delete(schema.resumeBullets);
-    await db.delete(schema.resumeDocuments);
-    await db.delete(schema.candidateEvidence);
-    await db.delete(schema.candidateCareerProfiles);
+    // Delete in reverse FK order scoped strictly to synthetic test candidates
+    await db.delete(schema.resumeDocuments).where(eq(schema.resumeDocuments.user_id, userAlphaId));
+    await db.delete(schema.resumeDocuments).where(eq(schema.resumeDocuments.user_id, userBetaId));
+    await db.delete(schema.candidateEvidence).where(eq(schema.candidateEvidence.user_id, userAlphaId));
+    await db.delete(schema.candidateEvidence).where(eq(schema.candidateEvidence.user_id, userBetaId));
+    await db.delete(schema.candidateCareerProfiles).where(eq(schema.candidateCareerProfiles.user_id, userAlphaId));
+    await db.delete(schema.candidateCareerProfiles).where(eq(schema.candidateCareerProfiles.user_id, userBetaId));
     await db.delete(schema.candidateSkills).where(eq(schema.candidateSkills.user_id, userAlphaId));
     await db.delete(schema.candidateSkills).where(eq(schema.candidateSkills.user_id, userBetaId));
     await db.delete(schema.candidateProjects).where(eq(schema.candidateProjects.user_id, userAlphaId));

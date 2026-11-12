@@ -26,7 +26,7 @@ import { sourceHealthTracker } from '../health/source-health.js';
 import { AsyncSemaphore } from '../utils/semaphore.js';
 import { config } from '../config/env.js';
 import type { ScheduledJob, SchedulerState, SchedulerStatus } from './types.js';
-import type { ICollector } from '../collectors/types.js';
+import type { ICollector, JobCandidate } from '../collectors/types.js';
 import type { PipelineSourceConfig } from '../pipeline/pipeline.js';
 
 const log = createLogger('scheduler');
@@ -140,10 +140,7 @@ class JobScheduler {
 
     const STARTUP_STAGGER_MS = 3_000;
     // Normal scans occupy slots [0 .. jobs.size - 1].
-    // Recent source sweeps use slots [jobs.size .. 2*jobs.size - 1] so they
-    // all start after every normal startup scan has been queued.
     // DB reconciliation uses slot [2*jobs.size] (runs last).
-    const recentSweepBaseSlot = this.jobs.size;
     const dbReconciliationSlot = this.jobs.size * 2;
 
     let startupIndex = 0;
@@ -205,7 +202,7 @@ class JobScheduler {
       return;
     }
 
-    for (const [name, timer] of this._startupTimers) {
+    for (const [, timer] of this._startupTimers) {
       clearTimeout(timer);
     }
     this._startupTimers.clear();

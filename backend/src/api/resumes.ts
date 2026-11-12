@@ -18,6 +18,7 @@ import {
   listCandidateEvidence,
   createCandidateEvidence,
   deleteCandidateEvidence,
+  reactivateCandidateEvidence,
   syncProfileToEvidence,
   addCandidateSkill,
   removeCandidateSkill,
@@ -78,9 +79,10 @@ export async function listEvidenceHandler(req: Request, res: Response): Promise<
   const authReq = req as StrictlyAuthenticatedRequest;
   const userId = authReq.user.id;
   const typeParam = typeof req.query.type === 'string' ? (req.query.type as EvidenceType) : undefined;
+  const includeWithdrawn = req.query.includeWithdrawn === 'true';
 
   try {
-    const evidence = await listCandidateEvidence(userId, typeParam);
+    const evidence = await listCandidateEvidence(userId, typeParam, includeWithdrawn);
     res.json({ evidence });
   } catch (err: any) {
     log.error({ err: err.message, userId }, 'Failed to list evidence');
@@ -91,10 +93,19 @@ export async function listEvidenceHandler(req: Request, res: Response): Promise<
 export async function addEvidenceHandler(req: Request, res: Response): Promise<void> {
   const authReq = req as StrictlyAuthenticatedRequest;
   const userId = authReq.user.id;
-  const { evidenceType, claimText, referenceId, verifiedStatus } = req.body;
+  const { evidenceType, claimText, referenceId, verifiedStatus, lifecycleState } = req.body;
 
   if (!evidenceType || !claimText) {
     res.status(400).json({ error: 'evidenceType and claimText are required' });
+    return;
+  }
+
+  // Safeguard: Candidate self-created claims are strictly SELF_REPORTED.
+  // Candidates cannot self-assign DOCUMENT_SUPPORTED or EXTERNALLY_VERIFIED via client input.
+  if (verifiedStatus && verifiedStatus !== 'SELF_REPORTED') {
+    res.status(400).json({
+      error: 'Unsupported verification level requested. Direct candidate claims must be SELF_REPORTED.',
+    });
     return;
   }
 
@@ -103,7 +114,8 @@ export async function addEvidenceHandler(req: Request, res: Response): Promise<v
       evidenceType,
       claimText,
       referenceId,
-      verifiedStatus,
+      verifiedStatus: 'SELF_REPORTED',
+      lifecycleState,
     });
     res.status(201).json({ evidence: created });
   } catch (err: any) {
@@ -127,6 +139,36 @@ export async function deleteEvidenceHandler(req: Request, res: Response): Promis
   } catch (err: any) {
     log.error({ err: err.message, id, userId }, 'Failed to delete evidence');
     res.status(500).json({ error: 'Failed to delete evidence', details: err.message });
+  }
+}
+
+export async function reactivateEvidenceHandler(req: Request, res: Response): Promise<void> {
+  const authReq = req as StrictlyAuthenticatedRequest;
+  const userId = authReq.user.id;
+  const id = String(req.params.id);
+  const { newVerifiedStatus, referenceId } = req.body || {};
+
+  // Safeguard: Candidate clients cannot self-upgrade their verification level.
+  // Verification upgrades require authoritative assessment or independent external verification.
+  if (newVerifiedStatus && newVerifiedStatus !== 'SELF_REPORTED') {
+    res.status(400).json({
+      error: 'Unsupported verification upgrade requested. Candidates cannot self-assign document or external verification.',
+    });
+    return;
+  }
+
+  try {
+    const reactivated = await reactivateCandidateEvidence(userId, id, {
+      referenceId,
+    });
+    if (!reactivated) {
+      res.status(404).json({ error: 'Evidence claim not found or access denied' });
+      return;
+    }
+    res.json({ evidence: reactivated });
+  } catch (err: any) {
+    log.error({ err: err.message, id, userId }, 'Failed to reactivate evidence');
+    res.status(500).json({ error: 'Failed to reactivate evidence', details: err.message });
   }
 }
 

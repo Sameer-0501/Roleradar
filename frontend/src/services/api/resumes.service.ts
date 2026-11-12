@@ -24,7 +24,8 @@ export type VerifiedStatus =
   | 'DOCUMENT_SUPPORTED'
   | 'PROJECT_SUPPORTED'
   | 'ASSESSMENT_SUPPORTED'
-  | 'EXTERNALLY_VERIFIED';
+  | 'EXTERNALLY_VERIFIED'
+  | 'WITHDRAWN';
 
 export type ProvenanceState = 'PROVENANCE_BACKED' | 'UNLINKED';
 
@@ -52,7 +53,9 @@ export interface CandidateEvidence {
   referenceId: string | null;
   claimText: string;
   verifiedStatus: VerifiedStatus;
+  lifecycleState?: 'ACTIVE' | 'WITHDRAWN';
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface ResumeBullet {
@@ -156,10 +159,24 @@ export const resumesService = {
   },
 
   // Master Evidence Vault
-  async listEvidence(type?: EvidenceType): Promise<CandidateEvidence[]> {
-    const query = type ? `?type=${encodeURIComponent(type)}` : '';
+  async listEvidence(type?: EvidenceType, includeWithdrawn?: boolean): Promise<CandidateEvidence[]> {
+    const params = new URLSearchParams();
+    if (type) params.append('type', type);
+    if (includeWithdrawn) params.append('includeWithdrawn', 'true');
+    const query = params.toString() ? `?${params.toString()}` : '';
     const data = await httpClient.get<{ evidence: CandidateEvidence[] }>(`/candidate/evidence${query}`);
     return data.evidence || [];
+  },
+
+  async reactivateEvidence(
+    id: string,
+    payload?: { newVerifiedStatus?: VerifiedStatus; referenceId?: string | null }
+  ): Promise<CandidateEvidence> {
+    const data = await httpClient.post<{ evidence: CandidateEvidence }>(
+      `/candidate/evidence/${encodeURIComponent(id)}/reactivate`,
+      payload || {}
+    );
+    return data.evidence;
   },
 
   async addEvidence(payload: {

@@ -29,6 +29,8 @@ export const SKILL_SYNONYMS: Record<string, string> = {
   typescript: 'TypeScript',
   'react.js': 'React',
   reactjs: 'React',
+  'react native': 'React Native',
+  reactnative: 'React Native',
   react: 'React',
   'node.js': 'Node.js',
   nodejs: 'Node.js',

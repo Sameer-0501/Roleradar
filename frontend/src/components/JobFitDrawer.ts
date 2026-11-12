@@ -24,6 +24,7 @@ import type {
   UnknownItem,
   AssessmentState,
   OverallEligibilityStatus,
+  EvidenceVerificationLevel,
 } from '../services/api/types.js';
 
 let activeAbortController: AbortController | null = null;
@@ -166,6 +167,27 @@ function renderSourceChip(source?: string): string {
   }
 
   return '<span class="jfd__source-chip">' + icon + ' ' + escapeHtml(label) + '</span>';
+}
+
+/**
+ * Renders evidence verification level badge (Engine 3 Master Career Evidence disclosure).
+ */
+function renderVerificationBadge(level?: EvidenceVerificationLevel): string {
+  if (!level) return '';
+  switch (level) {
+    case 'SELF_REPORTED':
+      return '<span class="jfd__vbadge jfd__vbadge--self-reported" title="Evidence is self-reported by candidate">👤 Self-Reported</span>';
+    case 'PROJECT_SUPPORTED':
+      return '<span class="jfd__vbadge jfd__vbadge--project-supported" title="Evidence grounded by portfolio project or code">🚀 Project Supported</span>';
+    case 'DOCUMENT_SUPPORTED':
+      return '<span class="jfd__vbadge jfd__vbadge--document-supported" title="Evidence verified by official document / credential">📄 Document Supported</span>';
+    case 'ASSESSMENT_SUPPORTED':
+      return '<span class="jfd__vbadge jfd__vbadge--assessment-supported" title="Evidence validated by skill assessment test">📊 Assessment Supported</span>';
+    case 'EXTERNALLY_VERIFIED':
+      return '<span class="jfd__vbadge jfd__vbadge--externally-verified" title="Evidence verified by authoritative external provider">🛡️ Externally Verified</span>';
+    default:
+      return '<span class="jfd__vbadge">' + escapeHtml(level) + '</span>';
+  }
 }
 
 /**
@@ -494,6 +516,7 @@ function renderRequirementRow(req: RequirementEvaluation): string {
         (req.evidenceSummary ? (
           '<div class="jfd__req-evidence">' +
             renderSourceChip(req.evidenceSource) +
+            (req.evidenceVerificationLevel ? renderVerificationBadge(req.evidenceVerificationLevel) : '') +
             '<span class="jfd__evidence-text">' + escapeHtml(req.evidenceSummary) + '</span>' +
           '</div>'
         ) : '') +
@@ -501,6 +524,11 @@ function renderRequirementRow(req: RequirementEvaluation): string {
           '<div class="jfd__req-dispute-pill">' +
             '⚖️ <strong>Candidate Dispute:</strong> ' + escapeHtml(req.disputeReason) +
             (req.candidateNote ? ' <em>(' + escapeHtml(req.candidateNote) + ')</em>' : '') +
+          '</div>'
+        ) : '') +
+        (req.candidateClarification ? (
+          '<div class="jfd__req-clarification-pill">' +
+            '💬 <strong>Candidate Clarification:</strong> ' + escapeHtml(req.candidateClarification) +
           '</div>'
         ) : '') +
       '</div>' +

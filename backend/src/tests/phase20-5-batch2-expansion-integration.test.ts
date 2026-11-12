@@ -124,13 +124,7 @@ describe('Phase 20.5 Batch 2 Workday Expansion: Fractal, Omnissa, Piramal, Eleva
   });
 
   afterAll(async () => {
-    // Teardown created jobs to preserve clean DB state
-    for (const emp of admittedEmployers) {
-      const companyId = companyIds[emp.name];
-      if (companyId) {
-        await db.delete(schema.jobs).where(eq(schema.jobs.company_id, companyId));
-      }
-    }
+    // Teardown: close connection safely without wiping pre-existing catalog data
     await closeConnection();
   });
 

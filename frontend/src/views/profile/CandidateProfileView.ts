@@ -141,7 +141,7 @@ export function mountCandidateProfileView(options: CandidateProfileViewOptions):
               }
             }
 
-            await profileService.uploadResume({
+            const uploadRes = await profileService.uploadResume({
               filename: file.name,
               base64,
               content,
@@ -149,7 +149,14 @@ export function mountCandidateProfileView(options: CandidateProfileViewOptions):
             });
             if (isDestroyed) return;
 
-            showToast('Resume uploaded and parsed successfully!', 'success');
+            if (uploadRes?.syncError) {
+              showToast(
+                `Resume uploaded, but evidence synchronization had an issue. You can safely retry from Evidence Vault.`,
+                'warning'
+              );
+            } else {
+              showToast('Resume uploaded and parsed successfully!', 'success');
+            }
             void loadProfileData();
           } catch (err: any) {
             if (isDestroyed) return;

@@ -212,12 +212,18 @@ describe('Engine 3 Critical Stabilization & Candidate Evidence Integrity', () =>
         .where(eq(schema.candidateEducations.id, candidate1EduId));
       expect(checkEdu).toBeUndefined();
 
-      // 4. Verify candidate_evidence claim is pruned so vault does not falsely claim support
+      // 4. Verify candidate_evidence claim is transitioned to WITHDRAWN in lifecycle_state while preserving verification level
       const checkEv = await db
         .select()
         .from(schema.candidateEvidence)
         .where(eq(schema.candidateEvidence.id, evId));
-      expect(checkEv.length).toBe(0);
+      expect(checkEv.length).toBe(1);
+      expect(checkEv[0].lifecycle_state).toBe('WITHDRAWN');
+      expect(checkEv[0].verified_status).toBe('SELF_REPORTED');
+
+      // Active evidence queries exclude withdrawn claims
+      const activeEv = await listCandidateEvidence(userCandidate1);
+      expect(activeEv.some((e) => e.id === evId)).toBe(false);
 
       // 5. Verify the linked resume bullet was safely unlinked rather than corrupted
       const [checkBullet] = await db
@@ -225,7 +231,6 @@ describe('Engine 3 Critical Stabilization & Candidate Evidence Integrity', () =>
         .from(schema.resumeBullets)
         .where(eq(schema.resumeBullets.id, bullet!.id));
       expect(checkBullet!.provenance_state).toBe('UNLINKED');
-      expect(checkBullet!.evidence_id).toBeNull();
     });
   });
 

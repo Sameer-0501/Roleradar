@@ -147,13 +147,7 @@ describe('Phase 20.5 Batch 4 Workday Expansion: GlobalFoundries, Philips, PUMA, 
   }, 45000);
 
   afterAll(async () => {
-    // Teardown: clean up test-created jobs to maintain database cleanliness
-    for (const emp of employerConfigs) {
-      const compId = companyIds[emp.name];
-      if (compId) {
-        await db.delete(schema.jobs).where(eq(schema.jobs.company_id, compId));
-      }
-    }
+    // Teardown: close connection safely without wiping pre-existing catalog data
     await closeConnection();
   });
 

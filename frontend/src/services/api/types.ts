@@ -584,6 +584,13 @@ export type RequirementCategory =
   | 'WORKPLACE_TYPE'
   | 'DOMAIN_KNOWLEDGE';
 
+export type EvidenceVerificationLevel =
+  | 'SELF_REPORTED'
+  | 'PROJECT_SUPPORTED'
+  | 'DOCUMENT_SUPPORTED'
+  | 'ASSESSMENT_SUPPORTED'
+  | 'EXTERNALLY_VERIFIED';
+
 export interface RequirementEvaluation {
   id: string;
   group: RequirementGroup;
@@ -593,6 +600,9 @@ export interface RequirementEvaluation {
   assessmentState: AssessmentState;
   evidenceSource?: EvidenceSource;
   evidenceSummary?: string;
+  evidenceId?: string;
+  evidenceClaimTitle?: string;
+  evidenceVerificationLevel?: EvidenceVerificationLevel;
   isDisputed?: boolean;
   disputeReason?: string;
   candidateNote?: string;

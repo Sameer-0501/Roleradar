@@ -327,17 +327,23 @@ Skills: Python, Docker, React, TypeScript
 
     const vaultTabDesc = await page.locator('#rs-tab-content-slot p').first().textContent().catch(() => '');
     const evidenceCardsCount = await page.locator('.rs-evidence-card').count();
-    const dbEvidenceCount = (await db.select().from(schema.candidateEvidence).where(eq(schema.candidateEvidence.user_id, synthUserId))).length;
+    const dbActiveEvidenceCount = (
+      await db
+        .select()
+        .from(schema.candidateEvidence)
+        .where(eq(schema.candidateEvidence.user_id, synthUserId))
+    ).filter((e) => e.lifecycle_state !== 'WITHDRAWN' && e.verified_status !== 'WITHDRAWN').length;
+    const dbTotalEvidenceCount = (await db.select().from(schema.candidateEvidence).where(eq(schema.candidateEvidence.user_id, synthUserId))).length;
 
     console.log(`  Tab Description: "${vaultTabDesc?.trim()}"`);
-    console.log(`  Rendered Evidence Cards: ${evidenceCardsCount} | DB Claims: ${dbEvidenceCount}`);
+    console.log(`  Rendered Active Cards: ${evidenceCardsCount} | DB Active Claims: ${dbActiveEvidenceCount} | DB Total (including Withdrawn): ${dbTotalEvidenceCount}`);
 
-    const scenario8Pass = evidenceCardsCount > 0 && evidenceCardsCount === dbEvidenceCount;
+    const scenario8Pass = evidenceCardsCount > 0 && evidenceCardsCount === dbActiveEvidenceCount;
     results.push({
       scenarioNumber: 8,
       name: 'Master Evidence Vault displays correct claims',
       status: scenario8Pass ? 'PASS' : 'FAIL',
-      evidence: `Vault renders all ${evidenceCardsCount} claims with status badges and filter controls. Tab description present.`,
+      evidence: `Vault renders all ${evidenceCardsCount} active claims with status badges. Withdrawn claims preserved in DB (${dbTotalEvidenceCount} total).`,
     });
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -348,15 +354,19 @@ Skills: Python, Docker, React, TypeScript
     await syncBtn.click();
     await page.waitForTimeout(1000);
 
-    const dbEvidenceCountPostSync1 = (await db.select().from(schema.candidateEvidence).where(eq(schema.candidateEvidence.user_id, synthUserId))).length;
+    const dbEvidenceCountPostSync1 = (
+      await db.select().from(schema.candidateEvidence).where(eq(schema.candidateEvidence.user_id, synthUserId))
+    ).filter((e) => e.lifecycle_state !== 'WITHDRAWN' && e.verified_status !== 'WITHDRAWN').length;
 
     await syncBtn.click();
     await page.waitForTimeout(1000);
 
-    const dbEvidenceCountPostSync2 = (await db.select().from(schema.candidateEvidence).where(eq(schema.candidateEvidence.user_id, synthUserId))).length;
-    console.log(`  DB Evidence count: initial=${dbEvidenceCount}, sync1=${dbEvidenceCountPostSync1}, sync2=${dbEvidenceCountPostSync2}`);
+    const dbEvidenceCountPostSync2 = (
+      await db.select().from(schema.candidateEvidence).where(eq(schema.candidateEvidence.user_id, synthUserId))
+    ).filter((e) => e.lifecycle_state !== 'WITHDRAWN' && e.verified_status !== 'WITHDRAWN').length;
+    console.log(`  DB Active Evidence count: initial=${dbActiveEvidenceCount}, sync1=${dbEvidenceCountPostSync1}, sync2=${dbEvidenceCountPostSync2}`);
 
-    const scenario9Pass = dbEvidenceCountPostSync1 === dbEvidenceCountPostSync2 && dbEvidenceCountPostSync1 === dbEvidenceCount;
+    const scenario9Pass = dbEvidenceCountPostSync1 === dbEvidenceCountPostSync2 && dbEvidenceCountPostSync1 === dbActiveEvidenceCount;
     results.push({
       scenarioNumber: 9,
       name: 'Repeated synchronization is idempotent',

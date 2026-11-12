@@ -52,6 +52,13 @@ export type EvidenceSource =
   | 'PREFERENCE'
   | 'CLARIFICATION';
 
+export type EvidenceVerificationLevel =
+  | 'SELF_REPORTED'
+  | 'PROJECT_SUPPORTED'
+  | 'DOCUMENT_SUPPORTED'
+  | 'ASSESSMENT_SUPPORTED'
+  | 'EXTERNALLY_VERIFIED';
+
 export type RequirementGroup = 'MANDATORY' | 'PREFERRED' | 'RESPONSIBILITY' | 'CONDITION';
 
 export type RequirementCategory =
@@ -72,6 +79,9 @@ export interface RequirementEvaluation {
   assessmentState: AssessmentState;
   evidenceSource?: EvidenceSource;
   evidenceSummary?: string;
+  evidenceId?: string;
+  evidenceClaimTitle?: string;
+  evidenceVerificationLevel?: EvidenceVerificationLevel;
   isDisputed?: boolean;
   disputeReason?: string;
   candidateNote?: string;
@@ -374,12 +384,23 @@ function deriveCountryFromLocation(location?: string | null): string | null {
 
 // ─── Deterministic Requirement Evaluator (Blueprint Section 5.3) ──────────────
 
+export interface CandidateEvidenceItem {
+  id: string;
+  userId?: string;
+  evidenceType: string;
+  referenceId: string | null;
+  claimText: string;
+  verifiedStatus: string;
+  lifecycleState: string;
+}
+
 export interface CandidateContext {
   profile?: CandidateProfileDto | null;
-  skills: Array<{ canonicalName: string; skillName: string }>;
-  educations: Array<{ degree: string; fieldOfStudy?: string | null; institution: string }>;
-  projects: Array<{ title: string; description?: string | null; technologies?: unknown }>;
+  skills: Array<{ id?: string; canonicalName: string; skillName: string }>;
+  educations: Array<{ id?: string; degree: string; fieldOfStudy?: string | null; institution: string }>;
+  projects: Array<{ id?: string; title: string; description?: string | null; technologies?: unknown }>;
   experiences: Array<{
+    id?: string;
     title: string;
     companyName: string;
     description?: string | null;
@@ -387,6 +408,7 @@ export interface CandidateContext {
     startDate?: Date | null;
     endDate?: Date | null;
   }>;
+  evidence?: CandidateEvidenceItem[];
   preferences?: {
     locations?: string[];
     workplace_types?: string[];
@@ -394,6 +416,108 @@ export interface CandidateContext {
     experience_level?: string;
   } | null;
   fitControls?: CandidateFitControls | null;
+}
+
+/**
+ * Normalizes claim text to extract clean skill name.
+ */
+function extractSkillFromClaim(claimText: string): string {
+  const prefix = 'demonstrated proficiency in ';
+  if (claimText.toLowerCase().startsWith(prefix)) {
+    return claimText.substring(prefix.length).trim();
+  }
+  return claimText.trim();
+}
+
+/**
+ * Deterministically checks if a skill or tool matches within freeform evidence text
+ * without false-positives (e.g. "React Native" does not match "React", "JavaScript" does not match "Java").
+ */
+function matchSkillInFreeText(skillName: string, text: string): boolean {
+  const sLower = skillName.toLowerCase();
+  const tLower = text.toLowerCase();
+
+  if (sLower === 'react' && tLower.includes('react native') && !tLower.replace(/react\s+native/g, '').includes('react')) {
+    return false;
+  }
+  if (sLower === 'java' && tLower.includes('javascript') && !tLower.replace(/javascript/g, '').includes('java')) {
+    return false;
+  }
+
+  const index = tLower.indexOf(sLower);
+  if (index === -1) return false;
+
+  const before = index > 0 ? tLower[index - 1]! : ' ';
+  const after = index + sLower.length < tLower.length ? tLower[index + sLower.length]! : ' ';
+  const isBoundary = (ch: string) => /[\s,;:.()\[\]\/"'`!?-]/.test(ch);
+
+  return isBoundary(before) && isBoundary(after);
+}
+
+/**
+ * Searches active candidate evidence for a matching skill, competency, or certification.
+ */
+function matchActiveSkillEvidence(
+  skillName: string,
+  activeEvidence: CandidateEvidenceItem[]
+): CandidateEvidenceItem | null {
+  const sLower = skillName.toLowerCase();
+
+  // Priority 1: Direct PROFILE_SKILL or ASSESSMENT
+  for (const ev of activeEvidence) {
+    if (ev.evidenceType === 'PROFILE_SKILL' || ev.evidenceType === 'ASSESSMENT') {
+      const extracted = extractSkillFromClaim(ev.claimText).toLowerCase();
+      if (extracted === sLower || matchSkillInFreeText(skillName, ev.claimText)) {
+        return ev;
+      }
+    }
+  }
+
+  // Priority 2: CERTIFICATION (e.g. AWS Certified Solutions Architect for AWS)
+  for (const ev of activeEvidence) {
+    if (ev.evidenceType === 'CERTIFICATION') {
+      if (matchSkillInFreeText(skillName, ev.claimText)) {
+        return ev;
+      }
+    }
+  }
+
+  // Priority 3: PROJECT evidence
+  for (const ev of activeEvidence) {
+    if (ev.evidenceType === 'PROJECT') {
+      if (matchSkillInFreeText(skillName, ev.claimText)) {
+        return ev;
+      }
+    }
+  }
+
+  // Priority 4: EXPERIENCE evidence
+  for (const ev of activeEvidence) {
+    if (ev.evidenceType === 'EXPERIENCE') {
+      if (matchSkillInFreeText(skillName, ev.claimText)) {
+        return ev;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Checks whether candidate explicitly withdrew an evidence claim for this skill.
+ */
+function isSkillClaimWithdrawn(
+  skillName: string,
+  withdrawnEvidence: CandidateEvidenceItem[]
+): boolean {
+  const sLower = skillName.toLowerCase();
+  return withdrawnEvidence.some((e) => {
+    if (e.evidenceType === 'PROFILE_SKILL' || e.evidenceType === 'ASSESSMENT') {
+      const extracted = extractSkillFromClaim(e.claimText).toLowerCase();
+      return extracted === sLower || matchSkillInFreeText(skillName, e.claimText);
+    }
+    return false;
+  });
 }
 
 /**
@@ -425,6 +549,15 @@ export function evaluateProofBasedJobFit(params: {
   const learnableSkillGaps: LearnableSkillGap[] = [];
   const unknownItems: UnknownItem[] = [];
 
+  // Partition candidate evidence into active vs withdrawn
+  const allEvidence = candidate.evidence || [];
+  const activeEvidence = allEvidence.filter(
+    (e) => e.lifecycleState === 'ACTIVE' && e.verifiedStatus !== 'WITHDRAWN'
+  );
+  const withdrawnEvidence = allEvidence.filter(
+    (e) => e.lifecycleState === 'WITHDRAWN' || e.verifiedStatus === 'WITHDRAWN'
+  );
+
   const candidateSkillsSet = new Set(
     candidate.skills.map((s) => s.canonicalName.toLowerCase()).concat(candidate.skills.map((s) => s.skillName.toLowerCase()))
   );
@@ -449,7 +582,8 @@ export function evaluateProofBasedJobFit(params: {
     candidate.skills.length === 0 &&
     candidate.projects.length === 0 &&
     candidate.educations.length === 0 &&
-    candidate.experiences.length === 0;
+    candidate.experiences.length === 0 &&
+    activeEvidence.length === 0;
 
   let reqIndex = 1;
 
@@ -467,12 +601,13 @@ export function evaluateProofBasedJobFit(params: {
     let state: AssessmentState = 'UNKNOWN';
     let source: EvidenceSource | undefined;
     let summary: string | undefined;
+    let evidenceId: string | undefined;
+    let evidenceClaimTitle: string | undefined;
+    let evidenceVerificationLevel: EvidenceVerificationLevel | undefined;
 
-    if (clarification?.value) {
-      state = 'SUPPORTED';
-      source = 'CLARIFICATION';
-      summary = `Candidate clarified: ${clarification.value}`;
-    } else if (candidateLevel === 'UNKNOWN' && totalExpMonths === 0 && candidate.experiences.length === 0) {
+    const activeExp = activeEvidence.filter((e) => e.evidenceType === 'EXPERIENCE');
+
+    if (candidateLevel === 'UNKNOWN' && totalExpMonths === 0 && candidate.experiences.length === 0 && activeExp.length === 0) {
       state = 'UNKNOWN';
       unknownItems.push({
         requirementId: reqId,
@@ -493,18 +628,41 @@ export function evaluateProofBasedJobFit(params: {
           reason: `Strict ${requiredYears}+ years experience threshold cannot be satisfied by Fresher profile`,
         });
       }
-    } else if (totalExpMonths >= requiredYears * 12) {
+    } else if (totalExpMonths >= requiredYears * 12 || (activeExp.length > 0 && totalExpMonths >= requiredYears * 12)) {
       state = 'SUPPORTED';
       source = 'EXPERIENCE';
-      summary = `Candidate profile documents ${Math.round(totalExpMonths / 12 * 10) / 10} years of experience`;
+      if (activeExp.length > 0) {
+        evidenceId = activeExp[0]?.id;
+        evidenceClaimTitle = activeExp[0]?.claimText;
+        const vLevel = (activeExp[0]?.verifiedStatus && activeExp[0]?.verifiedStatus !== 'WITHDRAWN'
+          ? activeExp[0]?.verifiedStatus
+          : 'SELF_REPORTED') as EvidenceVerificationLevel;
+        evidenceVerificationLevel = vLevel;
+        summary = `Candidate profile documents ${Math.round(totalExpMonths / 12 * 10) / 10} years of experience [${vLevel}]`;
+      } else {
+        evidenceVerificationLevel = 'SELF_REPORTED';
+        summary = `Candidate profile documents ${Math.round(totalExpMonths / 12 * 10) / 10} years of experience [SELF_REPORTED]`;
+      }
     } else if (candidateLevel === 'FRESHER' && requiredYears <= 2) {
       state = 'PARTIALLY_SUPPORTED';
       source = 'PROFILE_SKILL';
-      summary = `Fresher-adjacent role (${requiredYears}y); entry candidate can qualify with strong portfolio evidence`;
+      evidenceVerificationLevel = 'SELF_REPORTED';
+      summary = `Fresher-adjacent role (${requiredYears}y); entry candidate can qualify with strong portfolio evidence [SELF_REPORTED]`;
     } else {
       state = 'PARTIALLY_SUPPORTED';
       source = 'EXPERIENCE';
-      summary = `Candidate documents ${totalExpMonths} months experience towards ${requiredYears} years requirement`;
+      if (activeExp.length > 0) {
+        evidenceId = activeExp[0]?.id;
+        evidenceClaimTitle = activeExp[0]?.claimText;
+        const vLevel = (activeExp[0]?.verifiedStatus && activeExp[0]?.verifiedStatus !== 'WITHDRAWN'
+          ? activeExp[0]?.verifiedStatus
+          : 'SELF_REPORTED') as EvidenceVerificationLevel;
+        evidenceVerificationLevel = vLevel;
+        summary = `Candidate documents ${totalExpMonths} months experience towards ${requiredYears} years requirement [${vLevel}]`;
+      } else {
+        evidenceVerificationLevel = 'SELF_REPORTED';
+        summary = `Candidate documents ${totalExpMonths} months experience towards ${requiredYears} years requirement [SELF_REPORTED]`;
+      }
     }
 
     mandatoryEvaluations.push({
@@ -513,13 +671,16 @@ export function evaluateProofBasedJobFit(params: {
       category: 'EXPERIENCE',
       originalText: extracted.experiencePhrase || `Minimum ${requiredYears}+ years experience required`,
       extractedCriterion: `${requiredYears}+ years experience`,
-      assessmentState: dispute ? 'PARTIALLY_SUPPORTED' : state,
+      assessmentState: state,
       evidenceSource: source,
-      evidenceSummary: dispute ? `Candidate dispute: ${dispute.reason}` : summary,
+      evidenceSummary: summary,
+      evidenceId,
+      evidenceClaimTitle,
+      evidenceVerificationLevel,
       isDisputed: !!dispute,
       disputeReason: dispute?.reason,
       candidateNote: dispute?.candidateNote,
-      candidateClarification: clarification?.clarification,
+      candidateClarification: clarification?.clarification || clarification?.value,
     });
   } else if (extracted.isFresherCompatible) {
     // Fresher compatible role
@@ -544,6 +705,7 @@ export function evaluateProofBasedJobFit(params: {
   if (jobCountry && (workplaceMode === 'ONSITE' || workplaceMode === 'HYBRID')) {
     const reqId = `req-loc-${reqIndex++}`;
     const dispute = disputesMap.get(reqId);
+    const clarification = clarificationsMap.get(reqId);
     const candidateLocations = candidate.preferences?.locations || [];
 
     let state: AssessmentState = 'NOT_APPLICABLE';
@@ -595,12 +757,13 @@ export function evaluateProofBasedJobFit(params: {
       category: 'LOCATION',
       originalText: `Location: ${extracted.employmentConditions.workLocation || jobCountry} (${workplaceMode})`,
       extractedCriterion: `${jobCountry} (${workplaceMode})`,
-      assessmentState: dispute ? 'PARTIALLY_SUPPORTED' : state,
+      assessmentState: state,
       evidenceSource: source,
-      evidenceSummary: dispute ? `Candidate dispute: ${dispute.reason}` : summary,
+      evidenceSummary: summary,
       isDisputed: !!dispute,
       disputeReason: dispute?.reason,
       candidateNote: dispute?.candidateNote,
+      candidateClarification: clarification?.clarification || clarification?.value,
     });
   }
 
@@ -613,12 +776,52 @@ export function evaluateProofBasedJobFit(params: {
     let state: AssessmentState = 'UNKNOWN';
     let source: EvidenceSource | undefined;
     let summary: string | undefined;
+    let evidenceId: string | undefined;
+    let evidenceClaimTitle: string | undefined;
+    let evidenceVerificationLevel: EvidenceVerificationLevel | undefined;
 
-    if (clarification?.value) {
-      state = 'SUPPORTED';
-      source = 'CLARIFICATION';
-      summary = `Candidate clarified: ${clarification.value}`;
-    } else if (candidate.educations.length === 0) {
+    const activeEdu = activeEvidence.filter((e) => e.evidenceType === 'EDUCATION');
+    const withdrawnEdu = withdrawnEvidence.filter((e) => e.evidenceType === 'EDUCATION');
+
+    if (activeEdu.length > 0) {
+      // Prioritize active Engine 3 education evidence
+      const matchActive = activeEdu.find((edu) => {
+        const text = edu.claimText.toLowerCase();
+        const isBachelors = /bachelor|b\.?tech|b\.?s|b\.?e/i.test(text);
+        const isMasters = /master|m\.?tech|m\.?s/i.test(text);
+        const isPhd = /ph\.?d|doctorate/i.test(text);
+
+        if (extracted.requiredEducation?.degreeLevel === 'MASTER' && !isMasters && !isPhd) {
+          return false;
+        }
+        if (extracted.requiredEducation?.degreeLevel === 'PHD' && !isPhd) {
+          return false;
+        }
+        return isBachelors || isMasters || isPhd || /engineering|computer/i.test(text);
+      });
+
+      if (matchActive) {
+        state = 'SUPPORTED';
+        source = 'EDUCATION';
+        evidenceId = matchActive.id;
+        evidenceClaimTitle = matchActive.claimText;
+        const vLevel = (matchActive.verifiedStatus && matchActive.verifiedStatus !== 'WITHDRAWN'
+          ? matchActive.verifiedStatus
+          : 'SELF_REPORTED') as EvidenceVerificationLevel;
+        evidenceVerificationLevel = vLevel;
+        summary = `Verified degree evidence: "${matchActive.claimText}" [${vLevel}]`;
+      } else {
+        state = 'PARTIALLY_SUPPORTED';
+        source = 'EDUCATION';
+        evidenceId = activeEdu[0]?.id;
+        evidenceClaimTitle = activeEdu[0]?.claimText;
+        const vLevel = (activeEdu[0]?.verifiedStatus && activeEdu[0]?.verifiedStatus !== 'WITHDRAWN'
+          ? activeEdu[0]?.verifiedStatus
+          : 'SELF_REPORTED') as EvidenceVerificationLevel;
+        evidenceVerificationLevel = vLevel;
+        summary = `Candidate has degree evidence: "${activeEdu[0]?.claimText}" [${vLevel}]`;
+      }
+    } else if (candidate.educations.length === 0 || (withdrawnEdu.length > 0 && candidate.educations.length === 0)) {
       state = 'UNKNOWN';
       unknownItems.push({
         requirementId: reqId,
@@ -627,6 +830,7 @@ export function evaluateProofBasedJobFit(params: {
         actionPrompt: 'Add your degree or education credentials to your profile',
       });
     } else {
+      // Fallback to legacy candidate.educations
       const matchDegree = candidate.educations.find((edu) => {
         const d = edu.degree.toLowerCase();
         const f = (edu.fieldOfStudy || '').toLowerCase();
@@ -642,11 +846,13 @@ export function evaluateProofBasedJobFit(params: {
       if (matchDegree) {
         state = 'SUPPORTED';
         source = 'EDUCATION';
-        summary = `Verified degree: ${matchDegree.degree} from ${matchDegree.institution}`;
+        evidenceVerificationLevel = 'SELF_REPORTED';
+        summary = `Verified degree: ${matchDegree.degree} from ${matchDegree.institution} [SELF_REPORTED]`;
       } else {
         state = 'PARTIALLY_SUPPORTED';
         source = 'EDUCATION';
-        summary = `Candidate has degrees: ${candidate.educations.map((e) => e.degree).join(', ')}`;
+        evidenceVerificationLevel = 'SELF_REPORTED';
+        summary = `Candidate has degrees: ${candidate.educations.map((e) => e.degree).join(', ')} [SELF_REPORTED]`;
       }
     }
 
@@ -656,13 +862,16 @@ export function evaluateProofBasedJobFit(params: {
       category: 'EDUCATION',
       originalText: extracted.requiredEducation.rawText,
       extractedCriterion: `${extracted.requiredEducation.degreeLevel} degree in ${extracted.requiredEducation.fieldOfStudy || 'relevant field'}`,
-      assessmentState: dispute ? 'SUPPORTED' : state,
+      assessmentState: state,
       evidenceSource: source,
-      evidenceSummary: dispute ? `Candidate note: ${dispute.candidateNote || dispute.reason}` : summary,
+      evidenceSummary: summary,
+      evidenceId,
+      evidenceClaimTitle,
+      evidenceVerificationLevel,
       isDisputed: !!dispute,
       disputeReason: dispute?.reason,
       candidateNote: dispute?.candidateNote,
-      candidateClarification: clarification?.clarification,
+      candidateClarification: clarification?.clarification || clarification?.value,
     });
   }
 
@@ -676,48 +885,98 @@ export function evaluateProofBasedJobFit(params: {
     let state: AssessmentState = 'NOT_SUPPORTED';
     let source: EvidenceSource | undefined;
     let summary: string | undefined;
+    let evidenceId: string | undefined;
+    let evidenceClaimTitle: string | undefined;
+    let evidenceVerificationLevel: EvidenceVerificationLevel | undefined;
 
-    if (clarification?.value) {
+    // 1. Authoritative check: Active candidate evidence
+    const activeMatch = matchActiveSkillEvidence(skill, activeEvidence);
+    const isWithdrawn = isSkillClaimWithdrawn(skill, withdrawnEvidence);
+
+    if (activeMatch) {
       state = 'SUPPORTED';
-      source = 'CLARIFICATION';
-      summary = `Candidate clarified: ${clarification.value}`;
-    } else if (candidateSkillsSet.has(sLower)) {
+      source = (activeMatch.evidenceType === 'ASSESSMENT'
+        ? 'PROFILE_SKILL'
+        : activeMatch.evidenceType) as EvidenceSource;
+      evidenceId = activeMatch.id;
+      evidenceClaimTitle = activeMatch.claimText;
+      const vLevel = (activeMatch.verifiedStatus && activeMatch.verifiedStatus !== 'WITHDRAWN'
+        ? activeMatch.verifiedStatus
+        : 'SELF_REPORTED') as EvidenceVerificationLevel;
+      evidenceVerificationLevel = vLevel;
+      summary = `Direct match in active profile evidence: "${activeMatch.claimText}" [${vLevel}]`;
+    } else if (!isWithdrawn && candidateSkillsSet.has(sLower)) {
+      // Fallback: Legacy profile skills (if not withdrawn)
       state = 'SUPPORTED';
       source = 'PROFILE_SKILL';
-      summary = `Direct match in verified profile skills (${skill})`;
-    } else if (candidateTechInProjects.has(sLower)) {
+      evidenceVerificationLevel = 'SELF_REPORTED';
+      summary = `Direct match in profile skills (${skill}) [SELF_REPORTED]`;
+    } else if (!isWithdrawn && candidateTechInProjects.has(sLower)) {
+      // Fallback: Legacy project technologies
       state = 'SUPPORTED';
       source = 'PROJECT';
+      evidenceVerificationLevel = 'PROJECT_SUPPORTED';
       const project = candidate.projects.find((p) => {
         if (Array.isArray(p.technologies)) {
           return p.technologies.some((t) => typeof t === 'string' && t.toLowerCase() === sLower);
         }
         return false;
       });
-      summary = `Demonstrated in project: "${project?.title || 'Portfolio Project'}"`;
-    } else {
-      // Check work experience description
+      summary = `Demonstrated in project: "${project?.title || 'Portfolio Project'}" [PROJECT_SUPPORTED]`;
+    } else if (
+      !isWithdrawn &&
+      candidate.experiences.some((e) =>
+        (e.description || '').toLowerCase().includes(sLower) || (e.title || '').toLowerCase().includes(sLower)
+      )
+    ) {
+      // Fallback: Legacy experience descriptions
       const matchedExp = candidate.experiences.find((e) =>
         (e.description || '').toLowerCase().includes(sLower) || (e.title || '').toLowerCase().includes(sLower)
-      );
+      )!;
+      state = 'SUPPORTED';
+      source = 'EXPERIENCE';
+      evidenceVerificationLevel = 'SELF_REPORTED';
+      summary = `Applied in role at ${matchedExp.companyName} (${matchedExp.title}) [SELF_REPORTED]`;
+    } else {
+      // 2. Check adjacent transferable technologies
+      const adjacent = ADJACENT_TECH_MAP[skill] || [];
+      let matchedAdjacentEv: CandidateEvidenceItem | null = null;
+      let matchedAdjacentTech: string | null = null;
 
-      if (matchedExp) {
-        state = 'SUPPORTED';
-        source = 'EXPERIENCE';
-        summary = `Applied in role at ${matchedExp.companyName} (${matchedExp.title})`;
+      for (const adj of adjacent) {
+        const adjEv = matchActiveSkillEvidence(adj, activeEvidence);
+        if (adjEv) {
+          matchedAdjacentEv = adjEv;
+          matchedAdjacentTech = adj;
+          break;
+        }
+      }
+
+      if (matchedAdjacentEv && matchedAdjacentTech) {
+        state = 'PARTIALLY_SUPPORTED';
+        source = 'PROFILE_SKILL';
+        evidenceId = matchedAdjacentEv.id;
+        evidenceClaimTitle = matchedAdjacentEv.claimText;
+        const vLevel = (matchedAdjacentEv.verifiedStatus && matchedAdjacentEv.verifiedStatus !== 'WITHDRAWN'
+          ? matchedAdjacentEv.verifiedStatus
+          : 'SELF_REPORTED') as EvidenceVerificationLevel;
+        evidenceVerificationLevel = vLevel;
+        summary = `Transferable knowledge via adjacent technology evidence: ${matchedAdjacentTech} [${vLevel}]`;
       } else {
-        // Check adjacent transferable technologies
-        const adjacent = ADJACENT_TECH_MAP[skill] || [];
-        const matchedAdjacent = adjacent.find(
-          (adj) => candidateSkillsSet.has(adj.toLowerCase()) || candidateTechInProjects.has(adj.toLowerCase())
+        const matchedLegacyAdjacent = adjacent.find(
+          (adj) =>
+            !isSkillClaimWithdrawn(adj, withdrawnEvidence) &&
+            (candidateSkillsSet.has(adj.toLowerCase()) || candidateTechInProjects.has(adj.toLowerCase()))
         );
 
-        if (matchedAdjacent) {
+        if (matchedLegacyAdjacent) {
           state = 'PARTIALLY_SUPPORTED';
           source = 'PROFILE_SKILL';
-          summary = `Transferable knowledge via adjacent technology: ${matchedAdjacent}`;
+          evidenceVerificationLevel = 'SELF_REPORTED';
+          summary = `Transferable knowledge via adjacent technology: ${matchedLegacyAdjacent} [SELF_REPORTED]`;
         } else if (hasEmptyProfile) {
           state = 'UNKNOWN';
+          summary = `Profile has no recorded technical skills or evidence`;
           unknownItems.push({
             requirementId: reqId,
             criterion: `${skill} proficiency`,
@@ -726,6 +985,9 @@ export function evaluateProofBasedJobFit(params: {
           });
         } else {
           state = 'NOT_SUPPORTED';
+          summary = isWithdrawn
+            ? `Evidence for ${skill} was withdrawn; no other active supporting evidence`
+            : `No verified or profile evidence found for ${skill}`;
           learnableSkillGaps.push({
             requirementId: reqId,
             skillName: skill,
@@ -742,13 +1004,16 @@ export function evaluateProofBasedJobFit(params: {
       category: 'TECHNICAL_SKILL',
       originalText: `Required proficiency: ${skill}`,
       extractedCriterion: skill,
-      assessmentState: dispute ? 'PARTIALLY_SUPPORTED' : state,
+      assessmentState: state,
       evidenceSource: source,
-      evidenceSummary: dispute ? `Candidate dispute: ${dispute.reason}` : summary,
+      evidenceSummary: summary,
+      evidenceId,
+      evidenceClaimTitle,
+      evidenceVerificationLevel,
       isDisputed: !!dispute,
       disputeReason: dispute?.reason,
       candidateNote: dispute?.candidateNote,
-      candidateClarification: clarification?.clarification,
+      candidateClarification: clarification?.clarification || clarification?.value,
     });
   }
 
@@ -762,39 +1027,86 @@ export function evaluateProofBasedJobFit(params: {
     let state: AssessmentState = 'NOT_SUPPORTED';
     let source: EvidenceSource | undefined;
     let summary: string | undefined;
+    let evidenceId: string | undefined;
+    let evidenceClaimTitle: string | undefined;
+    let evidenceVerificationLevel: EvidenceVerificationLevel | undefined;
 
-    if (clarification?.value) {
+    const activeMatch = matchActiveSkillEvidence(skill, activeEvidence);
+    const isWithdrawn = isSkillClaimWithdrawn(skill, withdrawnEvidence);
+
+    if (activeMatch) {
       state = 'SUPPORTED';
-      source = 'CLARIFICATION';
-      summary = `Candidate clarified: ${clarification.value}`;
-    } else if (candidateSkillsSet.has(sLower)) {
+      source = (activeMatch.evidenceType === 'ASSESSMENT'
+        ? 'PROFILE_SKILL'
+        : activeMatch.evidenceType) as EvidenceSource;
+      evidenceId = activeMatch.id;
+      evidenceClaimTitle = activeMatch.claimText;
+      const vLevel = (activeMatch.verifiedStatus && activeMatch.verifiedStatus !== 'WITHDRAWN'
+        ? activeMatch.verifiedStatus
+        : 'SELF_REPORTED') as EvidenceVerificationLevel;
+      evidenceVerificationLevel = vLevel;
+      summary = `Present in active profile evidence: "${activeMatch.claimText}" [${vLevel}]`;
+    } else if (!isWithdrawn && candidateSkillsSet.has(sLower)) {
       state = 'SUPPORTED';
       source = 'PROFILE_SKILL';
-      summary = `Present in profile skills (${skill})`;
-    } else if (candidateTechInProjects.has(sLower)) {
+      evidenceVerificationLevel = 'SELF_REPORTED';
+      summary = `Present in profile skills (${skill}) [SELF_REPORTED]`;
+    } else if (!isWithdrawn && candidateTechInProjects.has(sLower)) {
       state = 'SUPPORTED';
       source = 'PROJECT';
-      summary = `Applied in project portfolio`;
+      evidenceVerificationLevel = 'PROJECT_SUPPORTED';
+      summary = `Applied in project portfolio [PROJECT_SUPPORTED]`;
     } else {
       const adjacent = ADJACENT_TECH_MAP[skill] || [];
-      const matchedAdjacent = adjacent.find(
-        (adj) => candidateSkillsSet.has(adj.toLowerCase()) || candidateTechInProjects.has(adj.toLowerCase())
-      );
+      let matchedAdjacentEv: CandidateEvidenceItem | null = null;
+      let matchedAdjacentTech: string | null = null;
 
-      if (matchedAdjacent) {
+      for (const adj of adjacent) {
+        const adjEv = matchActiveSkillEvidence(adj, activeEvidence);
+        if (adjEv) {
+          matchedAdjacentEv = adjEv;
+          matchedAdjacentTech = adj;
+          break;
+        }
+      }
+
+      if (matchedAdjacentEv && matchedAdjacentTech) {
         state = 'PARTIALLY_SUPPORTED';
         source = 'PROFILE_SKILL';
-        summary = `Adjacent exposure via ${matchedAdjacent}`;
-      } else if (hasEmptyProfile) {
-        state = 'UNKNOWN';
+        evidenceId = matchedAdjacentEv.id;
+        evidenceClaimTitle = matchedAdjacentEv.claimText;
+        const vLevel = (matchedAdjacentEv.verifiedStatus && matchedAdjacentEv.verifiedStatus !== 'WITHDRAWN'
+          ? matchedAdjacentEv.verifiedStatus
+          : 'SELF_REPORTED') as EvidenceVerificationLevel;
+        evidenceVerificationLevel = vLevel;
+        summary = `Adjacent exposure via active evidence: ${matchedAdjacentTech} [${vLevel}]`;
       } else {
-        state = 'NOT_SUPPORTED';
-        learnableSkillGaps.push({
-          requirementId: reqId,
-          skillName: skill,
-          importance: 'PREFERRED',
-          recommendedAction: `Optional booster: Explore ${skill} fundamentals`,
-        });
+        const matchedLegacyAdjacent = adjacent.find(
+          (adj) =>
+            !isSkillClaimWithdrawn(adj, withdrawnEvidence) &&
+            (candidateSkillsSet.has(adj.toLowerCase()) || candidateTechInProjects.has(adj.toLowerCase()))
+        );
+
+        if (matchedLegacyAdjacent) {
+          state = 'PARTIALLY_SUPPORTED';
+          source = 'PROFILE_SKILL';
+          evidenceVerificationLevel = 'SELF_REPORTED';
+          summary = `Adjacent exposure via ${matchedLegacyAdjacent} [SELF_REPORTED]`;
+        } else if (hasEmptyProfile) {
+          state = 'UNKNOWN';
+          summary = 'Profile has no recorded preferred skills or evidence';
+        } else {
+          state = 'NOT_SUPPORTED';
+          summary = isWithdrawn
+            ? `Evidence for ${skill} was withdrawn; no other active supporting evidence`
+            : `No verified or profile evidence found for ${skill}`;
+          learnableSkillGaps.push({
+            requirementId: reqId,
+            skillName: skill,
+            importance: 'PREFERRED',
+            recommendedAction: `Optional booster: Explore ${skill} fundamentals`,
+          });
+        }
       }
     }
 
@@ -804,13 +1116,16 @@ export function evaluateProofBasedJobFit(params: {
       category: 'TECHNICAL_SKILL',
       originalText: `Preferred: ${skill}`,
       extractedCriterion: skill,
-      assessmentState: dispute ? 'PARTIALLY_SUPPORTED' : state,
+      assessmentState: state,
       evidenceSource: source,
-      evidenceSummary: dispute ? `Candidate dispute: ${dispute.reason}` : summary,
+      evidenceSummary: summary,
+      evidenceId,
+      evidenceClaimTitle,
+      evidenceVerificationLevel,
       isDisputed: !!dispute,
       disputeReason: dispute?.reason,
       candidateNote: dispute?.candidateNote,
-      candidateClarification: clarification?.clarification,
+      candidateClarification: clarification?.clarification || clarification?.value,
     });
   }
 
@@ -878,8 +1193,22 @@ export async function getProofBasedJobFit(userId: string, jobId: string): Promis
     .where(eq(schema.candidateProfiles.user_id, userId))
     .limit(1);
 
+  const evidenceRows = await db
+    .select({
+      id: schema.candidateEvidence.id,
+      userId: schema.candidateEvidence.user_id,
+      evidenceType: schema.candidateEvidence.evidence_type,
+      referenceId: schema.candidateEvidence.reference_id,
+      claimText: schema.candidateEvidence.claim_text,
+      verifiedStatus: schema.candidateEvidence.verified_status,
+      lifecycleState: schema.candidateEvidence.lifecycle_state,
+    })
+    .from(schema.candidateEvidence)
+    .where(eq(schema.candidateEvidence.user_id, userId));
+
   const skills = await db
     .select({
+      id: schema.candidateSkills.id,
       skillName: schema.candidateSkills.skill_name,
       canonicalName: schema.candidateSkills.canonical_name,
     })
@@ -888,6 +1217,7 @@ export async function getProofBasedJobFit(userId: string, jobId: string): Promis
 
   const educations = await db
     .select({
+      id: schema.candidateEducations.id,
       degree: schema.candidateEducations.degree,
       fieldOfStudy: schema.candidateEducations.field_of_study,
       institution: schema.candidateEducations.institution,
@@ -897,6 +1227,7 @@ export async function getProofBasedJobFit(userId: string, jobId: string): Promis
 
   const projects = await db
     .select({
+      id: schema.candidateProjects.id,
       title: schema.candidateProjects.title,
       description: schema.candidateProjects.description,
       technologies: schema.candidateProjects.technologies,
@@ -906,6 +1237,7 @@ export async function getProofBasedJobFit(userId: string, jobId: string): Promis
 
   const experiences = await db
     .select({
+      id: schema.candidateExperiences.id,
       title: schema.candidateExperiences.title,
       companyName: schema.candidateExperiences.company_name,
       description: schema.candidateExperiences.description,
@@ -959,6 +1291,7 @@ export async function getProofBasedJobFit(userId: string, jobId: string): Promis
       educations,
       projects,
       experiences,
+      evidence: evidenceRows,
       preferences: preferences
         ? {
             locations: (preferences.locations as string[]) || [],

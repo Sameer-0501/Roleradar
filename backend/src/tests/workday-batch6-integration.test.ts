@@ -127,25 +127,18 @@ describe('Phase 20.5 Batch 6 Workday Expansion: Haleon, Nasdaq, TransUnion, Broa
     const seedResult = await seedSources();
     expect(seedResult.size).toBeGreaterThanOrEqual(146);
 
-    // Retrieve company IDs and clean up any pre-existing jobs for clean baseline
+    // Retrieve company IDs without destroying pre-existing jobs (Phase 20.5D teardown safety standard)
     for (const emp of employerConfigs) {
       const company = await db.query.companies.findFirst({
         where: eq(schema.companies.name, emp.name),
       });
       expect(company, `Company record must exist for ${emp.name}`).toBeDefined();
       companyIds[emp.name] = company!.id;
-      await db.delete(schema.jobs).where(eq(schema.jobs.company_id, company!.id));
     }
   }, 45000);
 
   afterAll(async () => {
-    // Teardown: clean up test-created jobs to maintain database cleanliness
-    for (const emp of employerConfigs) {
-      const compId = companyIds[emp.name];
-      if (compId) {
-        await db.delete(schema.jobs).where(eq(schema.jobs.company_id, compId));
-      }
-    }
+    // Teardown: close connection safely without wiping pre-existing catalog data
     await closeConnection();
   });
 

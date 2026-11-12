@@ -94,6 +94,7 @@ import {
   listEvidenceHandler,
   addEvidenceHandler,
   deleteEvidenceHandler,
+  reactivateEvidenceHandler,
   syncEvidenceHandler,
   addCandidateSkillHandler,
   deleteCandidateSkillHandler,
@@ -257,6 +258,10 @@ export function createRouter(): Router {
 
   router.delete('/candidate/evidence/:id', requireAuth, (req, res) => {
     void deleteEvidenceHandler(req, res);
+  });
+
+  router.post('/candidate/evidence/:id/reactivate', requireAuth, (req, res) => {
+    void reactivateEvidenceHandler(req, res);
   });
 
   router.post('/candidate/evidence/sync', requireAuth, (req, res) => {

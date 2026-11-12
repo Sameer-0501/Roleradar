@@ -866,13 +866,18 @@ export const candidateEvidence = pgTable(
     reference_id: uuid('reference_id'),
     claim_text: text('claim_text').notNull(),
     verified_status: text('verified_status').notNull().default('SELF_REPORTED'),
+    lifecycle_state: text('lifecycle_state').notNull().default('ACTIVE'),
     created_at: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updated_at: timestamp('updated_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (t) => [
     index('candidate_evidence_user_idx').on(t.user_id),
     index('candidate_evidence_type_idx').on(t.user_id, t.evidence_type),
+    index('candidate_evidence_lifecycle_idx').on(t.user_id, t.lifecycle_state),
   ]
 );
 

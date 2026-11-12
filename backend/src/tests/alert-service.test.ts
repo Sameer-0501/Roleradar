@@ -299,5 +299,83 @@ describe('Alert Service Intent Generation', () => {
       expect(stats.matchedUsers).toBe(1);
       expect(stats.createdNotifications).toBe(1);
     });
+
+    it('enforces canonical ATS identity in idempotency_key for physical job posting deduplication', async () => {
+      let passedValues: any = null;
+      const mockInsert = vi.fn().mockReturnValue({
+        values: vi.fn().mockImplementation((val) => {
+          passedValues = val;
+          return {
+            onConflictDoNothing: vi.fn().mockReturnValue({
+              returning: vi.fn().mockResolvedValue([{ id: 'notif-canonical-1' }]),
+            }),
+          };
+        }),
+      });
+
+      const mockDb = {
+        select: vi
+          .fn()
+          .mockReturnValueOnce({
+            from: vi.fn().mockReturnValue({
+              innerJoin: vi.fn().mockReturnValue({
+                where: vi.fn().mockReturnValue({
+                  limit: vi.fn().mockResolvedValue([
+                    {
+                      id: 'job-uuid-999',
+                      companyId: 'comp-transunion',
+                      companyName: 'TransUnion',
+                      sourceSystem: 'WORKDAY',
+                      externalJobId: '19043143',
+                      title: 'Associate Developer, SQL and UNIX operating system',
+                      location: 'Hyderabad',
+                      workplaceType: 'ONSITE',
+                      officialUrl: 'https://transunion.wd5.myworkdayjobs.com/TransUnion/job/19043143',
+                      status: 'ACTIVE',
+                      verificationStatus: 'VERIFIED',
+                      description: 'Fresher welcome',
+                    },
+                  ]),
+                }),
+              }),
+            }),
+          })
+          .mockReturnValueOnce({
+            from: vi.fn().mockReturnValue({
+              innerJoin: vi.fn().mockReturnValue({
+                where: vi.fn().mockResolvedValue([
+                  {
+                    userId: 'user-sameer',
+                    email: 'sameer@example.com',
+                    name: 'Sameer',
+                    roles: ['Associate Developer'],
+                    locations: ['Hyderabad'],
+                    workplaceTypes: ['ONSITE'],
+                    experienceLevel: 'FRESHER',
+                    companyIds: [],
+                    keywords: [],
+                    emailAlertsEnabled: true,
+                    instantNotifications: true,
+                  },
+                ]),
+              }),
+            }),
+          })
+          .mockReturnValueOnce({
+            from: vi.fn().mockReturnValue({
+              where: vi.fn().mockResolvedValue([]),
+            }),
+          }),
+        insert: mockInsert,
+      };
+
+      vi.mocked(dbModule.getDb).mockReturnValue(mockDb as unknown as ReturnType<typeof dbModule.getDb>);
+      const stats = await evaluateAndCreateInstantAlerts('job-uuid-999');
+      expect(stats.createdNotifications).toBe(1);
+      expect(passedValues).toBeDefined();
+      expect(passedValues.idempotency_key).toBe(
+        'user-sameer:comp-transunion:WORKDAY:19043143:INSTANT_JOB'
+      );
+    });
   });
 });

@@ -166,7 +166,13 @@ export async function evaluateAndCreateInstantAlerts(
 
     if (matchResult.matched) {
       stats.matchedUsers++;
-      const idempotencyKey = `${user.userId}:${jobId}:INSTANT_JOB`;
+      // Canonical idempotency key based on physical ATS posting identity:
+      // (user_id + company_id + source_system + external_job_id)
+      // This permanently guarantees that a user cannot receive duplicate alerts for the same
+      // employer job posting, even if internal database job records are deleted or re-created with new UUIDs.
+      const idempotencyKey = candidateJob.externalJobId
+        ? `${user.userId}:${candidateJob.companyId}:${candidateJob.sourceSystem}:${candidateJob.externalJobId}:INSTANT_JOB`
+        : `${user.userId}:${jobId}:INSTANT_JOB`;
 
       try {
         const [inserted] = await db
@@ -180,13 +186,7 @@ export async function evaluateAndCreateInstantAlerts(
             idempotency_key: idempotencyKey,
             discovery_reason: options.discoveryReason ?? 'NEW_JOB',
           })
-          .onConflictDoNothing({
-            target: [
-              schema.notifications.user_id,
-              schema.notifications.job_id,
-              schema.notifications.notification_type,
-            ],
-          })
+          .onConflictDoNothing()
           .returning({ id: schema.notifications.id });
 
         if (inserted?.id) {

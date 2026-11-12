@@ -10,7 +10,7 @@
  * 4. Multi-Variant Support: Generates and preserves role-specific variants without mutating the master evidence profile.
  */
 
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, ne } from 'drizzle-orm';
 import { getDb } from '../database/connection.js';
 import { schema } from '../database/index.js';
 import { extractJobRequirements } from '../matching/proof-based-fit-service.js';
@@ -374,21 +374,32 @@ export async function getResumeDocumentWithBullets(userId: string, resumeId: str
       displayOrder: schema.resumeBullets.display_order,
       evidenceClaim: schema.candidateEvidence.claim_text,
       evidenceType: schema.candidateEvidence.evidence_type,
+      evidenceStatus: schema.candidateEvidence.verified_status,
+      evidenceLifecycle: schema.candidateEvidence.lifecycle_state,
     })
     .from(schema.resumeBullets)
     .leftJoin(schema.candidateEvidence, eq(schema.resumeBullets.evidence_id, schema.candidateEvidence.id))
     .where(eq(schema.resumeBullets.resume_id, doc.id))
     .orderBy(schema.resumeBullets.display_order);
 
-  const bullets: TailoredBulletDto[] = bulletRows.map((b) => ({
-    id: b.id,
-    bulletText: b.bulletText,
-    provenanceState: b.provenanceState as ProvenanceState,
-    evidenceId: b.evidenceId,
-    evidenceClaimText: b.evidenceClaim || null,
-    evidenceType: b.evidenceType || null,
-    displayOrder: b.displayOrder,
-  }));
+  const bullets: TailoredBulletDto[] = bulletRows.map((b) => {
+    // If the backing evidence was withdrawn or removed, bullet is unlinked
+    const isWithdrawn = b.evidenceLifecycle === 'WITHDRAWN' || b.evidenceStatus === 'WITHDRAWN';
+    const effectiveState: ProvenanceState =
+      b.provenanceState === 'PROVENANCE_BACKED' && !isWithdrawn && !!b.evidenceId
+        ? 'PROVENANCE_BACKED'
+        : 'UNLINKED';
+
+    return {
+      id: b.id,
+      bulletText: b.bulletText,
+      provenanceState: effectiveState,
+      evidenceId: b.evidenceId,
+      evidenceClaimText: b.evidenceClaim || null,
+      evidenceType: b.evidenceType || null,
+      displayOrder: b.displayOrder,
+    };
+  });
 
   const provenanceBackedCount = bullets.filter((b) => b.provenanceState === 'PROVENANCE_BACKED').length;
   const truthfulnessScore = bullets.length > 0 ? Math.round((provenanceBackedCount / bullets.length) * 100) : 100;
@@ -434,7 +445,14 @@ export async function addResumeBullet(
     const [ev] = await db
       .select()
       .from(schema.candidateEvidence)
-      .where(and(eq(schema.candidateEvidence.id, params.evidenceId), eq(schema.candidateEvidence.user_id, userId)))
+      .where(
+        and(
+          eq(schema.candidateEvidence.id, params.evidenceId),
+          eq(schema.candidateEvidence.user_id, userId),
+          ne(schema.candidateEvidence.lifecycle_state, 'WITHDRAWN'),
+          ne(schema.candidateEvidence.verified_status, 'WITHDRAWN')
+        )
+      )
       .limit(1);
     if (ev) {
       provenanceState = 'PROVENANCE_BACKED';

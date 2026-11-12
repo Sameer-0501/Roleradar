@@ -332,6 +332,16 @@
   font-size: 0.8rem;
 }
 
+.jfd__req-clarification-pill {
+  margin-top: 0.4rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 6px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+  font-size: 0.8rem;
+}
+
 .jfd__req-actions {
   display: flex;
   justify-content: flex-end;
@@ -396,6 +406,48 @@
 .jfd__badge--na {
   background: #f8fafc;
   color: #94a3b8;
+}
+
+/* Engine 3 Evidence Verification Badges */
+.jfd__vbadge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.12rem 0.45rem;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border: 1px solid transparent;
+}
+
+.jfd__vbadge--self-reported {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #cbd5e1;
+}
+
+.jfd__vbadge--project-supported {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+
+.jfd__vbadge--document-supported {
+  background: #f0fdf4;
+  color: #15803d;
+  border-color: #bbf7d0;
+}
+
+.jfd__vbadge--assessment-supported {
+  background: #faf5ff;
+  color: #7e22ce;
+  border-color: #e9d5ff;
+}
+
+.jfd__vbadge--externally-verified {
+  background: #fffbeb;
+  color: #b45309;
+  border-color: #fde68a;
 }
 
 /* Inline Candidate Controls Form */
